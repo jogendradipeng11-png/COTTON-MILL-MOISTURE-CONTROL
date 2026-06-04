@@ -480,11 +480,12 @@
     let isLoginMode = true;
     let sandboxInterval = null;
 
-    // Local sandbox state database mock
+    // Local sandbox state database mock (using a bitmask or binary string to represent independent nozzles)
+    // Examples: "0000" = all off, "1001" = nozzle 1 and nozzle 4 on.
     let localDeviceState = {
       moisture: 6.2,
       pump: "OFF",
-      nozzles: 0,
+      nozzles: "0000", 
       temp: 24.5,
       humidity: 48.2,
       mode: "AUTO"
@@ -549,7 +550,7 @@
             loadDashboard(devID);
           })
           .catch(e => alert("Registration rejected: " + e.message));
-      }
+    }
     }
 
     function loadDashboard(devID) {
@@ -576,14 +577,27 @@
     function renderDashboardMetrics(d) {
       const moistureVal = typeof d.moisture === 'number' ? d.moisture : parseFloat(d.moisture) || 0;
       const pumpState = d.pump || 'OFF';
-      const nozzleCount = parseInt(d.nozzles) || 0;
+      
+      // Support both bitmask string "1001" and legacy numeric count safely
+      let nozzleString = "0000";
+      let activeCount = 0;
+      if (typeof d.nozzles === 'string') {
+        nozzleString = d.nozzles.padEnd(4, '0');
+        activeCount = (nozzleString.match(/1/g) || []).length;
+      } else if (typeof d.nozzles === 'number') {
+        activeCount = d.nozzles;
+        let tempStr = "";
+        for (let i = 1; i <= 4; i++) tempStr += (i <= d.nozzles) ? "1" : "0";
+        nozzleString = tempStr;
+      }
+
       const tempVal = typeof d.temp === 'number' ? d.temp : parseFloat(d.temp) || 0;
       const humidityVal = typeof d.humidity === 'number' ? d.humidity : parseFloat(d.humidity) || 0;
       isAutoMode = d.mode !== 'MANUAL';
 
       document.getElementById('moisture').textContent = moistureVal.toFixed(1) + '%';
       document.getElementById('pump').textContent = pumpState;
-      document.getElementById('nozzles').textContent = nozzleCount + '/4';
+      document.getElementById('nozzles').textContent = activeCount + '/4';
       document.getElementById('temp').textContent = tempVal.toFixed(1) + '°C';
       document.getElementById('humidity').textContent = humidityVal.toFixed(1) + '%';
 
@@ -597,7 +611,7 @@
         pumpIcon.classList.remove('on');
       }
 
-      if (pumpState === 'OFF' && nozzleCount === 0 && !isAutoMode) {
+      if (pumpState === 'OFF' && activeCount === 0 && !isAutoMode) {
         conveyorBelt.classList.remove('moving');
         cottonBales.forEach(b => b.classList.remove('moving'));
       } else {
@@ -605,10 +619,11 @@
         cottonBales.forEach(b => b.classList.add('moving'));
       }
 
+      // Render spraying animation independently for each jet position
       for (let i = 1; i <= 4; i++) {
         const mist = document.getElementById('mist' + i);
         if (mist) {
-          if (i <= nozzleCount && pumpState === 'ON') {
+          if (nozzleString[i - 1] === '1' && pumpState === 'ON') {
             mist.classList.add('spraying');
           } else {
             mist.classList.remove('spraying');
@@ -616,10 +631,10 @@
         }
       }
 
-      updateControlPanelInteractivity(pumpState, nozzleCount);
+      updateControlPanelInteractivity(pumpState, nozzleString);
     }
 
-    function updateControlPanelInteractivity(pumpState, nozzleCount) {
+    function updateControlPanelInteractivity(pumpState, nozzleString) {
       const modeBtn = document.getElementById('modeBtn');
       modeBtn.textContent = isAutoMode ? "AUTO MODE RUNNING" : "MANUAL CONTROLS UNLOCKED";
       modeBtn.className = isAutoMode ? 'btn-auto' : 'btn-manual';
@@ -630,7 +645,7 @@
 
       for (let i = 1; i <= 4; i++) {
         const btn = document.getElementById(`noz${i}Btn`);
-        const isActive = nozzleCount >= i;
+        const isActive = nozzleString[i - 1] === '1';
         btn.textContent = `Nozzle ${i}: ${isActive ? 'ON' : 'OFF'}`;
         btn.className = isActive ? 'btn-on' : 'btn-off';
       }
@@ -653,11 +668,10 @@
           const currentPump = snap.val() || 'OFF';
           const nextState = (currentPump === 'ON') ? 'OFF' : 'ON';
           
-          // SAFETY RULE: If switching pump to OFF, force nozzles down to 0 automatically
           if (nextState === 'OFF') {
             currentRef.update({
               pump: 'OFF',
-              nozzles: 0
+              nozzles: '0000'
             });
           } else {
             currentRef.child('pump').set('ON');
@@ -665,7 +679,7 @@
         });
       } else {
         localDeviceState.pump = (localDeviceState.pump === 'ON') ? 'OFF' : 'ON';
-        if (localDeviceState.pump === 'OFF') localDeviceState.nozzles = 0;
+        if (localDeviceState.pump === 'OFF') localDeviceState.nozzles = "0000";
         renderDashboardMetrics(localDeviceState);
       }
     }
@@ -674,24 +688,36 @@
       if (isAutoMode) return alert("Deactivate Auto Mode before using overrides.");
       
       if (currentRef) {
-        // Intercept check: Verify pump condition before executing adjustments
         currentRef.once('value', snap => {
           const d = snap.val() || {};
           if (d.pump !== 'ON') {
             return alert("Operation Blocked: Cannot activate hydration nozzles while main Pump is turned OFF!");
           }
           
-          let currentNozzles = parseInt(d.nozzles) || 0;
-          let nextNozzles = (currentNozzles >= n) ? n - 1 : n;
-          currentRef.child('nozzles').set(nextNozzles);
+          // Parse current state string securely
+          let currentNozzles = "0000";
+          if (typeof d.nozzles === 'string') {
+            currentNozzles = d.nozzles.padEnd(4, '0');
+          } else if (typeof d.nozzles === 'number') {
+            let tempStr = "";
+            for (let i = 1; i <= 4; i++) tempStr += (i <= d.nozzles) ? "1" : "0";
+            currentNozzles = tempStr;
+          }
+
+          // Invert state at position index (n-1) explicitly without modifying other indices
+          let nozzleArr = currentNozzles.split('');
+          nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
+          let nextNozzleString = nozzleArr.join('');
+
+          currentRef.child('nozzles').set(nextNozzleString);
         });
       } else {
-        // Sandbox environment logic checks
         if (localDeviceState.pump !== 'ON') {
           return alert("Operation Blocked: Cannot activate hydration nozzles while main Pump is turned OFF!");
         }
-        let currentNozzles = localDeviceState.nozzles;
-        localDeviceState.nozzles = (currentNozzles >= n) ? n - 1 : n;
+        let nozzleArr = localDeviceState.nozzles.split('');
+        nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
+        localDeviceState.nozzles = nozzleArr.join('');
         renderDashboardMetrics(localDeviceState);
       }
     }
@@ -705,15 +731,18 @@
 
           if (localDeviceState.moisture < 7.5) {
             localDeviceState.pump = "ON";
-            localDeviceState.nozzles = Math.min(4, localDeviceState.nozzles + 1);
+            localDeviceState.nozzles = "1111"; // All active in low moisture condition
           } else if (localDeviceState.moisture > 8.5) {
-            localDeviceState.nozzles = Math.max(0, localDeviceState.nozzles - 1);
-            if (localDeviceState.nozzles === 0) localDeviceState.pump = "OFF";
+            localDeviceState.nozzles = "0000";
+            localDeviceState.pump = "OFF";
           }
         }
 
-        if (localDeviceState.pump === "ON" && localDeviceState.nozzles > 0) {
-          localDeviceState.moisture += (0.04 * localDeviceState.nozzles);
+        // Count how many bits are set to '1'
+        let activeCount = (localDeviceState.nozzles.match(/1/g) || []).length;
+
+        if (localDeviceState.pump === "ON" && activeCount > 0) {
+          localDeviceState.moisture += (0.04 * activeCount);
         } else {
           localDeviceState.moisture -= 0.06;
         }
