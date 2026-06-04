@@ -269,8 +269,8 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // Control variable to block DB snapshot updates if we just clicked save
-    let temporalLockActive = false;
+    // This setting monitors configuration status to allow absolute box ownership control
+    let hasLoadedExistingConfig = false;
 
     let localDeviceState = { 
       moisture: null, pump: "OFF", nozzles: "0000", temp: 0, humidity: 0, mode: "AUTO",
@@ -360,21 +360,22 @@
     }
 
     function renderDashboardMetrics(d) {
-      if (temporalLockActive) return; // Freeze UI changes from DB while we work on saving input properties
-
       const pumpState = d.pump || 'OFF';
-      const minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
-      const maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
-
-      if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
-      if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
       
-      for(let i=1; i<=4; i++) {
-        if (document.activeElement !== document.getElementById('start' + i)) {
-          document.getElementById('start' + i).value = (d['start' + i] !== undefined && d['start' + i] !== null) ? d['start' + i] : "";
-        }
-        if (document.activeElement !== document.getElementById('stop' + i)) {
-          document.getElementById('stop' + i).value = (d['stop' + i] !== undefined && d['stop' + i] !== null) ? d['stop' + i] : "";
+      // ABSOLUTE FIX: Only populate input text fields if they are blank or if we have NEVER successfully read configured values yet.
+      // This protects your inputs from getting reset by empty parameters while you type or save!
+      if (!hasLoadedExistingConfig) {
+        const minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
+        const maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
+
+        if (minHum !== "" && maxHum !== "") {
+          hasLoadedExistingConfig = true; // Permanently unlock manual entry mode since valid parameters are found
+          document.getElementById('targetHumidityMin').value = minHum;
+          document.getElementById('targetHumidityMax').value = maxHum;
+          for(let i=1; i<=4; i++) {
+            document.getElementById('start' + i).value = d['start' + i];
+            document.getElementById('stop' + i).value = d['stop' + i];
+          }
         }
       }
 
@@ -474,18 +475,14 @@
         updatePayload['stop' + i] = stopVal;
       }
 
-      // Activate explicit window freeze lock to keep browser focus persistent
-      temporalLockActive = true;
+      // Tell user validation is complete, pushing parameters out to external storage endpoints
+      hasLoadedExistingConfig = true; 
 
       if (currentRef) { 
-        // Attempt a total diagnostic structural replacement path
         currentRef.update(updatePayload, function(error) {
           if (error) {
-            temporalLockActive = false;
-            alert("❌ Firebase Connection Error!\n\nReason: " + error.message + "\n\nCheck if your Realtime Database -> Rules are set to true!");
+            alert("❌ Firebase Connection Error!\n\nReason: " + error.message);
           } else {
-            // Keep locked for 1.5 seconds to let the network loop synchronize cleanly
-            setTimeout(() => { temporalLockActive = false; }, 1500);
             alert("✅ Configuration profiles successfully set and saved to live device database!");
           }
         });
@@ -494,11 +491,11 @@
         if(localDeviceState.moisture === null) {
           localDeviceState.moisture = 5.0; localDeviceState.humidity = 30.0; localDeviceState.temp = 24.5;
         }
-        temporalLockActive = false;
         alert("✅ Local Sandbox Profile configurations cached successfully!");
       }
     }
 
+    // Unaltered mode and tracking components loops
     function toggleMode() {
       const targetMode = isAutoMode ? "MANUAL" : "AUTO";
       if (currentRef) { currentRef.child('mode').set(targetMode); }
@@ -606,7 +603,7 @@
       localStorage.removeItem('saved_email'); localStorage.removeItem('saved_password');
       if (auth) { auth.signOut().then(() => resetUIState()); } else { resetUIState(); }
     }
-    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); temporalLockActive = false; }
+    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; }
   </script>
 </body>
 </html>
