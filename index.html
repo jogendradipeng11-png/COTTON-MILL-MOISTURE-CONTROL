@@ -176,7 +176,7 @@
             <h2>Operations Management</h2>
 
             <div class="target-box">
-              <label>System Target Humidity Range (%)</label>
+              <label>System Cotton Moisture Range (%)</label>
               <div class="range-inputs">
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MIN (Wake System)</span>
@@ -265,11 +265,20 @@
   </div>
 
   <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
+      authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
+      projectId: "cotoon-mill-moisture-control",
+      storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
+      messagingSenderId: "963386638721",
+      appId: "1:963386638721:web:7bf38960d8ff5987132880",
+      measurementId: "G-WZEW8L9SMB"
+    };
+
     let db, auth, currentRef = null;
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // This setting monitors configuration status to allow absolute box ownership control
     let hasLoadedExistingConfig = false;
 
     let localDeviceState = { 
@@ -362,14 +371,12 @@
     function renderDashboardMetrics(d) {
       const pumpState = d.pump || 'OFF';
       
-      // ABSOLUTE FIX: Only populate input text fields if they are blank or if we have NEVER successfully read configured values yet.
-      // This protects your inputs from getting reset by empty parameters while you type or save!
       if (!hasLoadedExistingConfig) {
         const minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
         const maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
 
         if (minHum !== "" && maxHum !== "") {
-          hasLoadedExistingConfig = true; // Permanently unlock manual entry mode since valid parameters are found
+          hasLoadedExistingConfig = true; 
           document.getElementById('targetHumidityMin').value = minHum;
           document.getElementById('targetHumidityMax').value = maxHum;
           for(let i=1; i<=4; i++) {
@@ -475,7 +482,6 @@
         updatePayload['stop' + i] = stopVal;
       }
 
-      // Tell user validation is complete, pushing parameters out to external storage endpoints
       hasLoadedExistingConfig = true; 
 
       if (currentRef) { 
@@ -495,7 +501,6 @@
       }
     }
 
-    // Unaltered mode and tracking components loops
     function toggleMode() {
       const targetMode = isAutoMode ? "MANUAL" : "AUTO";
       if (currentRef) { currentRef.child('mode').set(targetMode); }
@@ -543,18 +548,25 @@
       let systemMasterWake = false; 
       let activeStateArray = [false, false, false, false];
 
+      // Local mock values setup if empty
+      localDeviceState.moisture = 5.2;
+      localDeviceState.humidity = 45.0;
+      localDeviceState.temp = 28.4;
+
       sandboxInterval = setInterval(() => {
         if(localDeviceState.targetHumidityMin === null) {
           renderDashboardMetrics(localDeviceState);
           return;
         }
 
-        let currentHum = localDeviceState.humidity;
+        // REDIRECTED AUTOMATION: Read Core Cotton Moisture instead of Humidity!
+        let currentMoisture = localDeviceState.moisture;
 
         if (localDeviceState.mode === 'AUTO') {
-          if (currentHum < localDeviceState.targetHumidityMin) {
+          // If cotton moisture drops below MIN threshold limit, activate master switch loop
+          if (currentMoisture < localDeviceState.targetHumidityMin) {
             systemMasterWake = true;
-          } else if (currentHum >= localDeviceState.targetHumidityMax) {
+          } else if (currentMoisture >= localDeviceState.targetHumidityMax) {
             systemMasterWake = false;
           }
 
@@ -565,9 +577,10 @@
             let startLimit = localDeviceState['start' + i];
             let stopLimit = localDeviceState['stop' + i];
 
-            if (currentHum < startLimit && systemMasterWake) {
+            // Evaluate specific individual nozzle parameters directly against current core cotton condition data stream
+            if (currentMoisture < startLimit && systemMasterWake) {
               activeStateArray[i-1] = true;
-            } else if (currentHum > stopLimit || !systemMasterWake) {
+            } else if (currentMoisture > stopLimit || !systemMasterWake) {
               activeStateArray[i-1] = false;
             }
 
@@ -585,15 +598,15 @@
         
         let activeCount = (localDeviceState.nozzles.match(/1/g) || []).length;
         if (localDeviceState.pump === "ON" && activeCount > 0) {
-          localDeviceState.humidity += (0.12 * activeCount);
-          localDeviceState.moisture += (0.02 * activeCount);
+          localDeviceState.moisture += (0.05 * activeCount); // Hydrate cotton directly
+          localDeviceState.humidity += (0.15 * activeCount);
         } else {
+          localDeviceState.moisture -= 0.03; // Factory standard dry profile decrease
           localDeviceState.humidity -= 0.08; 
-          localDeviceState.moisture -= 0.01;
         }
 
-        if (localDeviceState.humidity < 20.0) localDeviceState.humidity = 20.0;
-        if (localDeviceState.humidity > 98.0) localDeviceState.humidity = 98.0;
+        if (localDeviceState.moisture < 2.0) localDeviceState.moisture = 2.0;
+        if (localDeviceState.moisture > 25.0) localDeviceState.moisture = 25.0;
 
         renderDashboardMetrics(localDeviceState);
       }, 1000);
