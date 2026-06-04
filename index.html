@@ -269,8 +269,8 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // Track whether any numbers are currently typed in by the user
-    let valuesAreConfigured = false;
+    // Control variable to block DB snapshot updates if we just clicked save
+    let temporalLockActive = false;
 
     let localDeviceState = { 
       moisture: null, pump: "OFF", nozzles: "0000", temp: 0, humidity: 0, mode: "AUTO",
@@ -360,31 +360,24 @@
     }
 
     function renderDashboardMetrics(d) {
+      if (temporalLockActive) return; // Freeze UI changes from DB while we work on saving input properties
+
       const pumpState = d.pump || 'OFF';
+      const minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
+      const maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
+
+      if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
+      if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
       
-      // FIX FIX FIX: If the user is currently typing inside a box, DO NOT let Firebase overwrite it with 0!
-      if (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) {
-        valuesAreConfigured = true;
-        if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = d.targetHumidityMin;
-        if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = d.targetHumidityMax;
-        
-        for(let i=1; i<=4; i++) {
-          if (document.activeElement !== document.getElementById('start' + i)) document.getElementById('start' + i).value = d['start' + i];
-          if (document.activeElement !== document.getElementById('stop' + i)) document.getElementById('stop' + i).value = d['stop' + i];
+      for(let i=1; i<=4; i++) {
+        if (document.activeElement !== document.getElementById('start' + i)) {
+          document.getElementById('start' + i).value = (d['start' + i] !== undefined && d['start' + i] !== null) ? d['start' + i] : "";
         }
-      } else {
-        // If device has no config variables yet, check if user is typing. If not focused, keep it empty/clean placeholder
-        if (!valuesAreConfigured) {
-          if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = "";
-          if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = "";
-          for(let i=1; i<=4; i++) {
-            if (document.activeElement !== document.getElementById('start' + i)) document.getElementById('start' + i).value = "";
-            if (document.activeElement !== document.getElementById('stop' + i)) document.getElementById('stop' + i).value = "";
-          }
+        if (document.activeElement !== document.getElementById('stop' + i)) {
+          document.getElementById('stop' + i).value = (d['stop' + i] !== undefined && d['stop' + i] !== null) ? d['stop' + i] : "";
         }
       }
 
-      // Check if hardware sensor telemetry loop data exists
       if (d.moisture == undefined || d.moisture == null) {
         document.getElementById('moisture').textContent = "Device Not Added";
         document.getElementById('temp').textContent = "0.0°C";
@@ -421,7 +414,7 @@
 
     function updateControlPanelInteractivity(pumpState, nozzleString) {
       const modeBtn = document.getElementById('modeBtn');
-      modeBtn.textContent = isAutoMode ? "AUTO RUN RUNNING" : "MANUAL OVERRIDES UNLOCKED";
+      modeBtn.textContent = isAutoMode ? "AUTO TIMELINE RUNNING" : "MANUAL OVERRIDES UNLOCKED";
       modeBtn.className = isAutoMode ? 'btn-auto' : 'btn-manual';
       
       document.getElementById('manualCardWrapper').style.opacity = isAutoMode ? "0.4" : "1";
@@ -439,74 +432,73 @@
     }
 
     function saveTargetAndSequencePreferences() {
-  let minHumRaw = document.getElementById("targetHumidityMin").value;
-  let maxHumRaw = document.getElementById("targetHumidityMax").value;
+      let minHumRaw = document.getElementById("targetHumidityMin").value;
+      let maxHumRaw = document.getElementById("targetHumidityMax").value;
 
-  if(minHumRaw === "" || maxHumRaw === "") {
-    alert("Configuration Error: Please specify valid Min and Max target ranges before saving.");
-    return;
-  }
+      if(minHumRaw === "" || maxHumRaw === "") {
+        alert("Configuration Error: Please specify valid Min and Max target ranges before saving.");
+        return;
+      }
 
-  let minHumInput = parseInt(minHumRaw);
-  let maxHumInput = parseInt(maxHumRaw);
+      let minHumInput = parseInt(minHumRaw);
+      let maxHumInput = parseInt(maxHumRaw);
 
-  if (minHumInput >= maxHumInput) {
-    alert("Configuration Error: System Minimum target must be lower than the Maximum sleep parameter.");
-    return;
-  }
+      if (minHumInput >= maxHumInput) {
+        alert("Configuration Error: System Minimum target must be lower than the Maximum sleep parameter.");
+        return;
+      }
 
-  // Gather all fields into a structured object payload
-  let updatePayload = {
-    targetHumidityMin: minHumInput,
-    targetHumidityMax: maxHumInput,
-    mode: isAutoMode ? "AUTO" : "MANUAL"
-  };
-  
-  // Read and verify all 4 nozzle states safely
-  for(let i=1; i<=4; i++) {
-    let startRaw = document.getElementById('start' + i).value;
-    let stopRaw = document.getElementById('stop' + i).value;
-    
-    if(startRaw === "" || stopRaw === "") {
-      alert("Configuration Error: Nozzle thresholds cannot be left blank.");
-      return;
+      let updatePayload = {
+        targetHumidityMin: minHumInput,
+        targetHumidityMax: maxHumInput
+      };
+      
+      for(let i=1; i<=4; i++) {
+        let startRaw = document.getElementById('start' + i).value;
+        let stopRaw = document.getElementById('stop' + i).value;
+        
+        if(startRaw === "" || stopRaw === "") {
+          alert("Configuration Error: Nozzle thresholds cannot be left blank.");
+          return;
+        }
+
+        let startVal = parseInt(startRaw);
+        let stopVal = parseInt(stopRaw);
+        
+        if (startVal >= stopVal) {
+          alert("Configuration Conflict: Start limit for Nozzle " + i + " must be strictly lower than its Stop value.");
+          return;
+        }
+        
+        updatePayload['start' + i] = startVal;
+        updatePayload['stop' + i] = stopVal;
+      }
+
+      // Activate explicit window freeze lock to keep browser focus persistent
+      temporalLockActive = true;
+
+      if (currentRef) { 
+        // Attempt a total diagnostic structural replacement path
+        currentRef.update(updatePayload, function(error) {
+          if (error) {
+            temporalLockActive = false;
+            alert("❌ Firebase Connection Error!\n\nReason: " + error.message + "\n\nCheck if your Realtime Database -> Rules are set to true!");
+          } else {
+            // Keep locked for 1.5 seconds to let the network loop synchronize cleanly
+            setTimeout(() => { temporalLockActive = false; }, 1500);
+            alert("✅ Configuration profiles successfully set and saved to live device database!");
+          }
+        });
+      } else { 
+        Object.assign(localDeviceState, updatePayload);
+        if(localDeviceState.moisture === null) {
+          localDeviceState.moisture = 5.0; localDeviceState.humidity = 30.0; localDeviceState.temp = 24.5;
+        }
+        temporalLockActive = false;
+        alert("✅ Local Sandbox Profile configurations cached successfully!");
+      }
     }
 
-    let startVal = parseInt(startRaw);
-    let stopVal = parseInt(stopRaw);
-    
-    if (startVal >= stopVal) {
-      alert("Configuration Conflict: Start limit for Nozzle " + i + " must be strictly lower than its Stop value.");
-      return;
-    }
-    
-    updatePayload['start' + i] = startVal;
-    updatePayload['stop' + i] = stopVal;
-  }
-
-  // Explicitly tell the system we are locked and configured now
-  valuesAreConfigured = true;
-
-  if (currentRef) { 
-    // Force set() instead of update() to create the paths if they don't exist yet
-    currentRef.update(updatePayload).then(() => {
-      alert("✅ Configuration profiles successfully set and saved to device database!");
-    }).catch(e => {
-      console.log("Update failed, trying structural forced set configuration override...");
-      currentRef.set(updatePayload).then(() => {
-        alert("✅ Forced synchronization successful! Device nodes initialized.");
-      }).catch(err => alert("Firebase Permission Error: " + err.message));
-    });
-  } else { 
-    Object.assign(localDeviceState, updatePayload);
-    if(localDeviceState.moisture === null) {
-      localDeviceState.moisture = 5.0;
-      localDeviceState.humidity = 30.0;
-      localDeviceState.temp = 24.5;
-    }
-    alert("✅ Range parameters synchronized to sandbox layout context.");
-  }
-}
     function toggleMode() {
       const targetMode = isAutoMode ? "MANUAL" : "AUTO";
       if (currentRef) { currentRef.child('mode').set(targetMode); }
@@ -614,7 +606,7 @@
       localStorage.removeItem('saved_email'); localStorage.removeItem('saved_password');
       if (auth) { auth.signOut().then(() => resetUIState()); } else { resetUIState(); }
     }
-    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); valuesAreConfigured = false; }
+    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); temporalLockActive = false; }
   </script>
 </body>
 </html>
