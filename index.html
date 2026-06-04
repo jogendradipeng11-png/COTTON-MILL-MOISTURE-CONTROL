@@ -180,11 +180,11 @@
               <div class="range-inputs">
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MIN (Wake System)</span>
-                  <input type="number" id="targetHumidityMin" min="0" max="95" value="" placeholder="Device Not Set">
+                  <input type="number" id="targetHumidityMin" min="0" max="95" placeholder="Type MIN%">
                 </div>
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MAX (Sleep System)</span>
-                  <input type="number" id="targetHumidityMax" min="0" max="95" value="" placeholder="Device Not Set">
+                  <input type="number" id="targetHumidityMax" min="0" max="95" placeholder="Type MAX%">
                 </div>
               </div>
             </div>
@@ -197,11 +197,11 @@
                   <span>Nozzle 1</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start1" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="start1" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop1" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="stop1" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -209,11 +209,11 @@
                   <span>Nozzle 2</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start2" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="start2" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop2" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="stop2" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -221,11 +221,11 @@
                   <span>Nozzle 3</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start3" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="start3" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop3" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="stop3" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -233,11 +233,11 @@
                   <span>Nozzle 4</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start4" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="start4" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop4" min="0" max="95" value="" placeholder="Not Set">
+                    <input type="number" id="stop4" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -269,7 +269,9 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // Setting all local simulation defaults to null/undefined or zero to mimic unadded device profile states
+    // Track whether any numbers are currently typed in by the user
+    let valuesAreConfigured = false;
+
     let localDeviceState = { 
       moisture: null, pump: "OFF", nozzles: "0000", temp: 0, humidity: 0, mode: "AUTO",
       targetHumidityMin: null, targetHumidityMax: null,
@@ -360,24 +362,30 @@
     function renderDashboardMetrics(d) {
       const pumpState = d.pump || 'OFF';
       
-      // Zero Check Handling Layer: Display empty string/placeholders if values do not exist in Firebase tree
-      const minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
-      const maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
-
-      if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
-      if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
-      
-      for(let i=1; i<=4; i++) {
-        if (document.activeElement !== document.getElementById('start' + i)) {
-          document.getElementById('start' + i).value = (d['start' + i] !== undefined && d['start' + i] !== null) ? d['start' + i] : "";
+      // FIX FIX FIX: If the user is currently typing inside a box, DO NOT let Firebase overwrite it with 0!
+      if (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) {
+        valuesAreConfigured = true;
+        if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = d.targetHumidityMin;
+        if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = d.targetHumidityMax;
+        
+        for(let i=1; i<=4; i++) {
+          if (document.activeElement !== document.getElementById('start' + i)) document.getElementById('start' + i).value = d['start' + i];
+          if (document.activeElement !== document.getElementById('stop' + i)) document.getElementById('stop' + i).value = d['stop' + i];
         }
-        if (document.activeElement !== document.getElementById('stop' + i)) {
-          document.getElementById('stop' + i).value = (d['stop' + i] !== undefined && d['stop' + i] !== null) ? d['stop' + i] : "";
+      } else {
+        // If device has no config variables yet, check if user is typing. If not focused, keep it empty/clean placeholder
+        if (!valuesAreConfigured) {
+          if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = "";
+          if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = "";
+          for(let i=1; i<=4; i++) {
+            if (document.activeElement !== document.getElementById('start' + i)) document.getElementById('start' + i).value = "";
+            if (document.activeElement !== document.getElementById('stop' + i)) document.getElementById('stop' + i).value = "";
+          }
         }
       }
 
-      // Check if telemetry data is available from device
-      if (d.moisture === undefined || d.moisture === null) {
+      // Check if hardware sensor telemetry loop data exists
+      if (d.moisture == undefined || d.moisture == null) {
         document.getElementById('moisture').textContent = "Device Not Added";
         document.getElementById('temp').textContent = "0.0°C";
         document.getElementById('humidity').textContent = "0.0%";
@@ -413,7 +421,7 @@
 
     function updateControlPanelInteractivity(pumpState, nozzleString) {
       const modeBtn = document.getElementById('modeBtn');
-      modeBtn.textContent = isAutoMode ? "AUTO TIMELINE RUNNING" : "MANUAL OVERRIDES UNLOCKED";
+      modeBtn.textContent = isAutoMode ? "AUTO RUN RUNNING" : "MANUAL OVERRIDES UNLOCKED";
       modeBtn.className = isAutoMode ? 'btn-auto' : 'btn-manual';
       
       document.getElementById('manualCardWrapper').style.opacity = isAutoMode ? "0.4" : "1";
@@ -473,13 +481,15 @@
         updatePayload['stop' + i] = stopVal;
       }
 
+      // Explicitly tell the system we are locked and configured now
+      valuesAreConfigured = true;
+
       if (currentRef) { 
         currentRef.update(updatePayload).then(() => {
-          alert("✅ System configuration rules submitted and written to live profile tree.");
+          alert("✅ Configuration profiles successfully set and saved to device database!");
         }).catch(e => alert("Database Sync Error: " + e.message));
       } else { 
         Object.assign(localDeviceState, updatePayload);
-        // Turn on fake physical sensor outputs if configuration variables are set in Sandbox mode
         if(localDeviceState.moisture === null) {
           localDeviceState.moisture = 5.0;
           localDeviceState.humidity = 30.0;
@@ -537,7 +547,6 @@
       let activeStateArray = [false, false, false, false];
 
       sandboxInterval = setInterval(() => {
-        // If configurations haven't been filled out yet, don't run simulation tracking passes
         if(localDeviceState.targetHumidityMin === null) {
           renderDashboardMetrics(localDeviceState);
           return;
@@ -597,7 +606,7 @@
       localStorage.removeItem('saved_email'); localStorage.removeItem('saved_password');
       if (auth) { auth.signOut().then(() => resetUIState()); } else { resetUIState(); }
     }
-    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); }
+    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); valuesAreConfigured = false; }
   </script>
 </body>
 </html>
