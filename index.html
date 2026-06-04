@@ -7,7 +7,6 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
   <style>
     body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #0a1428, #1e3c72); color: white; margin:0; padding:15px; }
@@ -81,12 +80,12 @@
         <div class="dashboard-box"><b>Humidity:</b> <span id="humidity">0%</span></div>
       </div>
 
-      <!-- Manual Control Section -->
+      <!-- Manual Control -->
       <div class="dashboard-box">
         <h2 style="text-align:center;">Control Mode</h2>
         <button id="modeBtn" onclick="toggleMode()" class="btn-auto">AUTO MODE</button>
         
-        <h3 style="text-align:center; margin:15px 0;">Manual Control</h3>
+        <h3 style="text-align:center; margin:15px 0 10px 0;">Manual Control</h3>
         <button id="pumpBtn" onclick="togglePump()" class="btn-off">Pump: OFF</button>
         <button id="noz1Btn" onclick="toggleNozzle(1)" class="btn-off">Nozzle 1: OFF</button>
         <button id="noz2Btn" onclick="toggleNozzle(2)" class="btn-off">Nozzle 2: OFF</button>
@@ -106,7 +105,6 @@
   appId: "1:963386638721:web:7bf38960d8ff5987132880",
   measurementId: "G-WZEW8L9SMB"
 };
-
 
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
@@ -161,7 +159,23 @@
           const mist = document.getElementById('mist' + i);
           if (mist) mist.style.opacity = (i <= (d.nozzles || 0)) ? '1' : '0';
         }
+
+        // Update Manual Buttons
+        updateManualButtons(d);
       });
+    }
+
+    function updateManualButtons(d) {
+      const pumpBtn = document.getElementById('pumpBtn');
+      pumpBtn.textContent = `Pump: ${d.pump || 'OFF'}`;
+      pumpBtn.className = (d.pump === 'ON') ? 'btn-on' : 'btn-off';
+
+      for (let i = 1; i <= 4; i++) {
+        const active = (d.nozzles || 0) >= i;
+        const btn = document.getElementById(`noz${i}Btn`);
+        btn.textContent = `Nozzle ${i}: ${active ? 'ON' : 'OFF'}`;
+        btn.className = active ? 'btn-on' : 'btn-off';
+      }
     }
 
     function toggleMode() {
