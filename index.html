@@ -269,6 +269,7 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
+    // Safety Fallbacks initialization values to guarantee no input boxes ever display 0 unexpectedly
     let localDeviceState = { 
       moisture: 6.2, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
       targetHumidityMin: 55, targetHumidityMax: 65,
@@ -359,18 +360,20 @@
     function renderDashboardMetrics(d) {
       const moistureVal = typeof d.moisture === 'number' ? d.moisture : parseFloat(d.moisture) || 0;
       const pumpState = d.pump || 'OFF';
-      const minHum = d.targetHumidityMin !== undefined ? d.targetHumidityMin : localDeviceState.targetHumidityMin;
-      const maxHum = d.targetHumidityMax !== undefined ? d.targetHumidityMax : localDeviceState.targetHumidityMax;
+      
+      // Zero Correction Check Logic: If Firebase fields don't exist, are zero, or null, use local fallback profiles
+      const minHum = (d.targetHumidityMin) ? d.targetHumidityMin : localDeviceState.targetHumidityMin;
+      const maxHum = (d.targetHumidityMax) ? d.targetHumidityMax : localDeviceState.targetHumidityMax;
 
       if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
       if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
       
       for(let i=1; i<=4; i++) {
         if (document.activeElement !== document.getElementById('start' + i)) {
-          document.getElementById('start' + i).value = d['start' + i] !== undefined ? d['start' + i] : localDeviceState['start' + i];
+          document.getElementById('start' + i).value = (d['start' + i]) ? d['start' + i] : localDeviceState['start' + i];
         }
         if (document.activeElement !== document.getElementById('stop' + i)) {
-          document.getElementById('stop' + i).value = d['stop' + i] !== undefined ? d['stop' + i] : localDeviceState['stop' + i];
+          document.getElementById('stop' + i).value = (d['stop' + i]) ? d['stop' + i] : localDeviceState['stop' + i];
         }
       }
 
@@ -509,7 +512,6 @@
         let currentHum = localDeviceState.humidity;
 
         if (localDeviceState.mode === 'AUTO') {
-          // 1. Master System Deadband Range Verification
           if (currentHum < localDeviceState.targetHumidityMin) {
             systemMasterWake = true;
           } else if (currentHum >= localDeviceState.targetHumidityMax) {
@@ -519,7 +521,6 @@
           let maskOutput = "";
           let anyActiveNozzle = false;
 
-          // 2. Individual Component Windows Processing Loops
           for(let i=1; i<=4; i++) {
             let startLimit = localDeviceState['start' + i];
             let stopLimit = localDeviceState['stop' + i];
