@@ -46,7 +46,7 @@
     .header-bar h1 { margin: 0; font-size: 1.8rem; }
     .moisture-display { text-align: center; margin-bottom: 25px; }
     .moisture-label { font-size: 1rem; text-transform: uppercase; letter-spacing: 2px; color: #aaa; }
-    .moisture-big { font-size: 6rem; font-weight: 800; color: var(--accent-cyan); text-shadow: 0 0 30px var(--accent-cyan-glow); line-height: 1.1; margin: 5px 0; }
+    .moisture-big { font-size: 5rem; font-weight: 800; color: var(--accent-cyan); text-shadow: 0 0 30px var(--accent-cyan-glow); line-height: 1.1; margin: 5px 0; }
     
     .dashboard-layout { display: grid; grid-template-columns: 1fr; gap: 25px; }
     @media (min-width: 992px) { .dashboard-layout { grid-template-columns: 3fr 2fr; } }
@@ -138,7 +138,7 @@
 
       <div class="moisture-display">
         <div class="moisture-label">Current Core Cotton Moisture</div>
-        <div class="moisture-big" id="moisture">0.0%</div>
+        <div class="moisture-big" id="moisture">Device Not Added</div>
       </div>
 
       <div class="dashboard-layout">
@@ -180,11 +180,11 @@
               <div class="range-inputs">
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MIN (Wake System)</span>
-                  <input type="number" id="targetHumidityMin" min="10" max="95" value="55">
+                  <input type="number" id="targetHumidityMin" min="0" max="95" value="" placeholder="Device Not Set">
                 </div>
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MAX (Sleep System)</span>
-                  <input type="number" id="targetHumidityMax" min="10" max="95" value="65">
+                  <input type="number" id="targetHumidityMax" min="0" max="95" value="" placeholder="Device Not Set">
                 </div>
               </div>
             </div>
@@ -197,11 +197,11 @@
                   <span>Nozzle 1</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start1" min="10" max="95" value="50">
+                    <input type="number" id="start1" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop1" min="10" max="95" value="60">
+                    <input type="number" id="stop1" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                 </div>
 
@@ -209,11 +209,11 @@
                   <span>Nozzle 2</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start2" min="10" max="95" value="45">
+                    <input type="number" id="start2" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop2" min="10" max="95" value="58">
+                    <input type="number" id="stop2" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                 </div>
 
@@ -221,11 +221,11 @@
                   <span>Nozzle 3</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start3" min="10" max="95" value="40">
+                    <input type="number" id="start3" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop3" min="10" max="95" value="55">
+                    <input type="number" id="stop3" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                 </div>
 
@@ -233,11 +233,11 @@
                   <span>Nozzle 4</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start4" min="10" max="95" value="35">
+                    <input type="number" id="start4" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop4" min="10" max="95" value="52">
+                    <input type="number" id="stop4" min="0" max="95" value="" placeholder="Not Set">
                   </div>
                 </div>
 
@@ -269,14 +269,14 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // Safety Fallbacks initialization values to guarantee no input boxes ever display 0 unexpectedly
+    // Setting all local simulation defaults to null/undefined or zero to mimic unadded device profile states
     let localDeviceState = { 
-      moisture: 6.2, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
-      targetHumidityMin: 55, targetHumidityMax: 65,
-      start1: 50, stop1: 60,
-      start2: 45, stop2: 58,
-      start3: 40, stop3: 55,
-      start4: 35, stop4: 52
+      moisture: null, pump: "OFF", nozzles: "0000", temp: 0, humidity: 0, mode: "AUTO",
+      targetHumidityMin: null, targetHumidityMax: null,
+      start1: null, stop1: null,
+      start2: null, stop2: null,
+      start3: null, stop3: null,
+      start4: null, stop4: null
     };
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -358,23 +358,37 @@
     }
 
     function renderDashboardMetrics(d) {
-      const moistureVal = typeof d.moisture === 'number' ? d.moisture : parseFloat(d.moisture) || 0;
       const pumpState = d.pump || 'OFF';
       
-      // Zero Correction Check Logic: If Firebase fields don't exist, are zero, or null, use local fallback profiles
-      const minHum = (d.targetHumidityMin) ? d.targetHumidityMin : localDeviceState.targetHumidityMin;
-      const maxHum = (d.targetHumidityMax) ? d.targetHumidityMax : localDeviceState.targetHumidityMax;
+      // Zero Check Handling Layer: Display empty string/placeholders if values do not exist in Firebase tree
+      const minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
+      const maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
 
       if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
       if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
       
       for(let i=1; i<=4; i++) {
         if (document.activeElement !== document.getElementById('start' + i)) {
-          document.getElementById('start' + i).value = (d['start' + i]) ? d['start' + i] : localDeviceState['start' + i];
+          document.getElementById('start' + i).value = (d['start' + i] !== undefined && d['start' + i] !== null) ? d['start' + i] : "";
         }
         if (document.activeElement !== document.getElementById('stop' + i)) {
-          document.getElementById('stop' + i).value = (d['stop' + i]) ? d['stop' + i] : localDeviceState['stop' + i];
+          document.getElementById('stop' + i).value = (d['stop' + i] !== undefined && d['stop' + i] !== null) ? d['stop' + i] : "";
         }
+      }
+
+      // Check if telemetry data is available from device
+      if (d.moisture === undefined || d.moisture === null) {
+        document.getElementById('moisture').textContent = "Device Not Added";
+        document.getElementById('temp').textContent = "0.0°C";
+        document.getElementById('humidity').textContent = "0.0%";
+        updateChartTimeline(0, 0, 0);
+      } else {
+        const moistureVal = typeof d.moisture === 'number' ? d.moisture : parseFloat(d.moisture) || 0;
+        const tempVal = d.temp || 0, humidityVal = d.humidity || 0;
+        document.getElementById('moisture').textContent = moistureVal.toFixed(1) + '%';
+        document.getElementById('temp').textContent = tempVal.toFixed(1) + '°C';
+        document.getElementById('humidity').textContent = humidityVal.toFixed(1) + '%';
+        updateChartTimeline(moistureVal, tempVal, humidityVal);
       }
 
       let nozzleString = "0000";
@@ -384,17 +398,9 @@
         activeCount = (nozzleString.match(/1/g) || []).length;
       }
 
-      const tempVal = d.temp || 0, humidityVal = d.humidity || 0;
       isAutoMode = d.mode !== 'MANUAL';
-
-      document.getElementById('moisture').textContent = moistureVal.toFixed(1) + '%';
       document.getElementById('pump').textContent = pumpState;
       document.getElementById('nozzles').textContent = activeCount + '/4';
-      document.getElementById('temp').textContent = tempVal.toFixed(1) + '°C';
-      document.getElementById('humidity').textContent = humidityVal.toFixed(1) + '%';
-
-      updateChartTimeline(moistureVal, tempVal, humidityVal);
-
       document.getElementById('pumpIcon').classList.toggle('on', pumpState === 'ON');
       
       for (let i = 1; i <= 4; i++) {
@@ -425,8 +431,16 @@
     }
 
     function saveTargetAndSequencePreferences() {
-      let minHumInput = parseInt(document.getElementById("targetHumidityMin").value) || 55;
-      let maxHumInput = parseInt(document.getElementById("targetHumidityMax").value) || 65;
+      let minHumRaw = document.getElementById("targetHumidityMin").value;
+      let maxHumRaw = document.getElementById("targetHumidityMax").value;
+
+      if(minHumRaw === "" || maxHumRaw === "") {
+        alert("Configuration Error: Please specify valid Min and Max target ranges before saving.");
+        return;
+      }
+
+      let minHumInput = parseInt(minHumRaw);
+      let maxHumInput = parseInt(maxHumRaw);
 
       if (minHumInput >= maxHumInput) {
         alert("Configuration Error: System Minimum target must be lower than the Maximum sleep parameter.");
@@ -439,8 +453,16 @@
       };
       
       for(let i=1; i<=4; i++) {
-        let startVal = parseInt(document.getElementById('start' + i).value) || 0;
-        let stopVal = parseInt(document.getElementById('stop' + i).value) || 0;
+        let startRaw = document.getElementById('start' + i).value;
+        let stopRaw = document.getElementById('stop' + i).value;
+        
+        if(startRaw === "" || stopRaw === "") {
+          alert("Configuration Error: Nozzle thresholds cannot be left blank.");
+          return;
+        }
+
+        let startVal = parseInt(startRaw);
+        let stopVal = parseInt(stopRaw);
         
         if (startVal >= stopVal) {
           alert("Configuration Conflict: Start limit for Nozzle " + i + " must be strictly lower than its Stop value.");
@@ -453,10 +475,16 @@
 
       if (currentRef) { 
         currentRef.update(updatePayload).then(() => {
-          alert("✅ System range profiles and nozzle targets saved successfully!");
+          alert("✅ System configuration rules submitted and written to live profile tree.");
         }).catch(e => alert("Database Sync Error: " + e.message));
       } else { 
         Object.assign(localDeviceState, updatePayload);
+        // Turn on fake physical sensor outputs if configuration variables are set in Sandbox mode
+        if(localDeviceState.moisture === null) {
+          localDeviceState.moisture = 5.0;
+          localDeviceState.humidity = 30.0;
+          localDeviceState.temp = 24.5;
+        }
         alert("✅ Range parameters synchronized to sandbox layout context.");
       }
     }
@@ -509,6 +537,12 @@
       let activeStateArray = [false, false, false, false];
 
       sandboxInterval = setInterval(() => {
+        // If configurations haven't been filled out yet, don't run simulation tracking passes
+        if(localDeviceState.targetHumidityMin === null) {
+          renderDashboardMetrics(localDeviceState);
+          return;
+        }
+
         let currentHum = localDeviceState.humidity;
 
         if (localDeviceState.mode === 'AUTO') {
