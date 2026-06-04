@@ -259,7 +259,7 @@
             </div>
           </div>
           
-          <div class="ownership-footer" id="ownerControlsArea">
+          <div class="ownership-footer" id="ownerControlsArea" style="display: none;">
             <button onclick="generateGuestShareCode()" style="width:50%; margin:0; padding:8px; font-size:0.8rem; background:#17a2b8; color:white; border-radius:6px;" id="shareDeviceBtn">🔗 Share Device</button>
             <button onclick="transferDeviceOwnership()" style="width:50%; margin:0; padding:8px; font-size:0.8rem; background:#dc3545; color:white; border-radius:6px;" id="transferDeviceBtn">Transfer Device</button>
           </div>
@@ -290,6 +290,7 @@
     let hasLoadedExistingConfig = false;
     let currentDeviceOwnerEmail = null; 
     let userHasReadOnlyPermissions = false; 
+    let firebaseDataFullyReceived = false; // STRICT NETWORK LOADING LOCK FLAG
 
     let localDeviceState = { 
       moisture: 4.0, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
@@ -369,6 +370,11 @@
       document.getElementById('authScreen').classList.add('hidden');
       document.getElementById('dashboardScreen').classList.remove('hidden');
       document.getElementById('syncedDevice').textContent = devID;
+      
+      // Reset loading tracking lock variables upon fresh logins
+      firebaseDataFullyReceived = false; 
+      userHasReadOnlyPermissions = false;
+
       initTelemetryChart(); loadDevice(devID);
     }
 
@@ -376,22 +382,28 @@
       if (db) {
         if (currentRef) currentRef.off();
         currentRef = db.ref('devices/' + devID);
-        currentRef.on('value', snap => { renderDashboardMetrics(snap.val() || {}); });
+        currentRef.on('value', snap => { 
+          firebaseDataFullyReceived = true; // Unlock processing loop
+          renderDashboardMetrics(snap.val() || {}); 
+        });
       } else { startSandboxSimulation(); }
     }
 
     function renderDashboardMetrics(d) {
+      // PREVENT EARLY CODE RUN: If data from network hasn't arrived yet, stop!
+      if (!firebaseDataFullyReceived) return;
+
       const pumpState = d.pump || 'OFF';
       let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
       currentDeviceOwnerEmail = d.deviceOwner || null;
 
-      // FIXED SECURITY ROUTINE: Enforce checking whenever account email differs from stored owner
+      // STRICT OWNER EVALUATION LOGIC LOOP
       if (currentDeviceOwnerEmail !== null && currentDeviceOwnerEmail !== activeUserEmail) {
         if (!userHasReadOnlyPermissions) {
           let systemSharedAccessKey = d.guestCode || "";
           
           if (systemSharedAccessKey === "") {
-            alert("🔒 Access Denied:\nThis device has not generated a guest code yet. Please request the Master Owner to generate a code first.");
+            alert("🔒 Access Denied:\nThis device belongs to " + currentDeviceOwnerEmail + " but has not generated a guest share code yet.");
             logout();
             return;
           }
@@ -402,24 +414,24 @@
             userHasReadOnlyPermissions = true;
             alert("✅ Share Code Verified! Guest monitoring access unlocked.");
           } else {
-            alert("❌ Invalid Code. Connection refused.");
+            alert("❌ Invalid Code. Access Denied.");
             logout();
             return;
           }
         }
       }
 
-      // Hide all administrative control frames if the account is flagged as a guest layout
+      // NO-SHARING SECURITY BLOCK FOR JUNIOR ACCOUNTS
       if (userHasReadOnlyPermissions) {
         document.getElementById("saveConfigBtn").disabled = true;
         document.getElementById("saveConfigBtn").textContent = "🔒 Settings Locked by Owner";
         document.getElementById("saveConfigBtn").style.backgroundColor = "#555";
-        document.getElementById("ownerControlsArea").style.display = "none"; // Completely hide sharing buttons from juniors
+        document.getElementById("ownerControlsArea").style.display = "none"; // Hide completely from juniors
       } else {
         document.getElementById("saveConfigBtn").disabled = false;
         document.getElementById("saveConfigBtn").textContent = "💾 Save Configuration Settings";
         document.getElementById("saveConfigBtn").style.backgroundColor = "#00cc88";
-        document.getElementById("ownerControlsArea").style.display = "flex";
+        document.getElementById("ownerControlsArea").style.display = "flex"; // Show only to master user
       }
 
       let minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
@@ -585,7 +597,7 @@
     }
 
     function generateGuestShareCode() {
-      if (userHasReadOnlyPermissions) return;
+      if (userHasReadOnlyPermissions) return; // Block secondary code generations
       
       let freshlyGeneratedPin = Math.floor(1000 + Math.random() * 9000).toString();
       
@@ -666,7 +678,6 @@
       }
     }
 
-    // Unchanged backend telemetry tracking logic loops
     function startSandboxSimulation() {
       if (sandboxInterval) clearInterval(sandboxInterval);
       
@@ -733,7 +744,7 @@
       localStorage.removeItem('saved_email'); localStorage.removeItem('saved_password');
       if (auth) { auth.signOut().then(() => resetUIState()); } else { resetUIState(); }
     }
-    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; userHasReadOnlyPermissions = false; }
+    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; userHasReadOnlyPermissions = false; firebaseDataFullyReceived = false; }
   </script>
 </body>
 </html>
