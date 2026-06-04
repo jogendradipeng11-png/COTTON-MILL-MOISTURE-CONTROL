@@ -439,66 +439,74 @@
     }
 
     function saveTargetAndSequencePreferences() {
-      let minHumRaw = document.getElementById("targetHumidityMin").value;
-      let maxHumRaw = document.getElementById("targetHumidityMax").value;
+  let minHumRaw = document.getElementById("targetHumidityMin").value;
+  let maxHumRaw = document.getElementById("targetHumidityMax").value;
 
-      if(minHumRaw === "" || maxHumRaw === "") {
-        alert("Configuration Error: Please specify valid Min and Max target ranges before saving.");
-        return;
-      }
+  if(minHumRaw === "" || maxHumRaw === "") {
+    alert("Configuration Error: Please specify valid Min and Max target ranges before saving.");
+    return;
+  }
 
-      let minHumInput = parseInt(minHumRaw);
-      let maxHumInput = parseInt(maxHumRaw);
+  let minHumInput = parseInt(minHumRaw);
+  let maxHumInput = parseInt(maxHumRaw);
 
-      if (minHumInput >= maxHumInput) {
-        alert("Configuration Error: System Minimum target must be lower than the Maximum sleep parameter.");
-        return;
-      }
+  if (minHumInput >= maxHumInput) {
+    alert("Configuration Error: System Minimum target must be lower than the Maximum sleep parameter.");
+    return;
+  }
 
-      let updatePayload = {
-        targetHumidityMin: minHumInput,
-        targetHumidityMax: maxHumInput
-      };
-      
-      for(let i=1; i<=4; i++) {
-        let startRaw = document.getElementById('start' + i).value;
-        let stopRaw = document.getElementById('stop' + i).value;
-        
-        if(startRaw === "" || stopRaw === "") {
-          alert("Configuration Error: Nozzle thresholds cannot be left blank.");
-          return;
-        }
-
-        let startVal = parseInt(startRaw);
-        let stopVal = parseInt(stopRaw);
-        
-        if (startVal >= stopVal) {
-          alert("Configuration Conflict: Start limit for Nozzle " + i + " must be strictly lower than its Stop value.");
-          return;
-        }
-        
-        updatePayload['start' + i] = startVal;
-        updatePayload['stop' + i] = stopVal;
-      }
-
-      // Explicitly tell the system we are locked and configured now
-      valuesAreConfigured = true;
-
-      if (currentRef) { 
-        currentRef.update(updatePayload).then(() => {
-          alert("✅ Configuration profiles successfully set and saved to device database!");
-        }).catch(e => alert("Database Sync Error: " + e.message));
-      } else { 
-        Object.assign(localDeviceState, updatePayload);
-        if(localDeviceState.moisture === null) {
-          localDeviceState.moisture = 5.0;
-          localDeviceState.humidity = 30.0;
-          localDeviceState.temp = 24.5;
-        }
-        alert("✅ Range parameters synchronized to sandbox layout context.");
-      }
+  // Gather all fields into a structured object payload
+  let updatePayload = {
+    targetHumidityMin: minHumInput,
+    targetHumidityMax: maxHumInput,
+    mode: isAutoMode ? "AUTO" : "MANUAL"
+  };
+  
+  // Read and verify all 4 nozzle states safely
+  for(let i=1; i<=4; i++) {
+    let startRaw = document.getElementById('start' + i).value;
+    let stopRaw = document.getElementById('stop' + i).value;
+    
+    if(startRaw === "" || stopRaw === "") {
+      alert("Configuration Error: Nozzle thresholds cannot be left blank.");
+      return;
     }
 
+    let startVal = parseInt(startRaw);
+    let stopVal = parseInt(stopRaw);
+    
+    if (startVal >= stopVal) {
+      alert("Configuration Conflict: Start limit for Nozzle " + i + " must be strictly lower than its Stop value.");
+      return;
+    }
+    
+    updatePayload['start' + i] = startVal;
+    updatePayload['stop' + i] = stopVal;
+  }
+
+  // Explicitly tell the system we are locked and configured now
+  valuesAreConfigured = true;
+
+  if (currentRef) { 
+    // Force set() instead of update() to create the paths if they don't exist yet
+    currentRef.update(updatePayload).then(() => {
+      alert("✅ Configuration profiles successfully set and saved to device database!");
+    }).catch(e => {
+      console.log("Update failed, trying structural forced set configuration override...");
+      currentRef.set(updatePayload).then(() => {
+        alert("✅ Forced synchronization successful! Device nodes initialized.");
+      }).catch(err => alert("Firebase Permission Error: " + err.message));
+    });
+  } else { 
+    Object.assign(localDeviceState, updatePayload);
+    if(localDeviceState.moisture === null) {
+      localDeviceState.moisture = 5.0;
+      localDeviceState.humidity = 30.0;
+      localDeviceState.temp = 24.5;
+    }
+    alert("✅ Range parameters synchronized to sandbox layout context.");
+  }
+}
     function toggleMode() {
       const targetMode = isAutoMode ? "MANUAL" : "AUTO";
       if (currentRef) { currentRef.child('mode').set(targetMode); }
