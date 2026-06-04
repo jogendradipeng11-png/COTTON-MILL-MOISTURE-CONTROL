@@ -101,8 +101,7 @@
 
     .btn-save-cfg { background-color: #00cc88; color: white; margin: 5px 0 0 0; font-size: 1rem; border-radius: 8px; padding: 14px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
     
-    /* Ownership Transfer Element Style Block */
-    .ownership-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; background: rgba(220, 53, 69, 0.1); padding: 10px; border-radius: 10px; border: 1px dashed var(--btn-danger); }
+    .ownership-footer { display: flex; gap: 10px; justify-content: space-between; align-items: center; margin-top: 15px; background: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.1); }
 
     input, button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 8px; font-size: 1.05rem; box-sizing: border-box; }
     input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; transition: all 0.3s; }
@@ -245,7 +244,7 @@
                 </div>
 
               </div>
-              <button class="btn-save-cfg" onclick="saveTargetAndSequencePreferences()">💾 Save Configuration Settings</button>
+              <button class="btn-save-cfg" id="saveConfigBtn" onclick="saveTargetAndSequencePreferences()">💾 Save Configuration Settings</button>
             </div>
 
             <button id="modeBtn" onclick="toggleMode()" class="btn-auto">AUTO RUN MODE</button>
@@ -261,8 +260,8 @@
           </div>
           
           <div class="ownership-footer">
-            <span style="font-size: 0.75rem; color: #ff5e62;">Device Lock Active</span>
-            <button onclick="transferDeviceOwnership()" style="width:auto; margin:0; padding:6px 12px; font-size:0.75rem; background:#dc3545; color:white; border-radius:4px;">Transfer Device</button>
+            <button onclick="generateGuestShareCode()" style="width:50%; margin:0; padding:8px; font-size:0.8rem; background:#17a2b8; color:white; border-radius:6px;" id="shareDeviceBtn">🔗 Share Device</button>
+            <button onclick="transferDeviceOwnership()" style="width:50%; margin:0; padding:8px; font-size:0.8rem; background:#dc3545; color:white; border-radius:6px;" id="transferDeviceBtn">Transfer Device</button>
           </div>
 
           <div style="font-size: 0.8rem; color: #888; text-align: center; margin-top: 20px; line-height: 1.4;">
@@ -289,7 +288,8 @@
     const MAX_GRAPH_POINTS = 20;
 
     let hasLoadedExistingConfig = false;
-    let currentDeviceOwnerEmail = null; // Protection cache tracking pointer variable
+    let currentDeviceOwnerEmail = null; 
+    let userHasReadOnlyPermissions = false; // Guest security toggle switch flag variable
 
     let localDeviceState = { 
       moisture: 4.0, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
@@ -298,7 +298,8 @@
       start2: 4, stop2: 7,
       start3: 4, stop3: 6,
       start4: 4, stop4: 5,
-      deviceOwner: null
+      deviceOwner: null,
+      guestCode: null
     };
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -381,16 +382,34 @@
 
     function renderDashboardMetrics(d) {
       const pumpState = d.pump || 'OFF';
-      
-      // CRITICAL SECURITY INTERCEPTOR LAYER: Verify master entry record properties
       let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
       currentDeviceOwnerEmail = d.deviceOwner || null;
 
-      // If a separate account tries accessing an established path, immediately force logout protection kick rules
+      // DUAL INTERCEPTOR PROTECTION MATRIX LAYER: Check if logged account matches owner node signatures
       if (currentDeviceOwnerEmail !== null && currentDeviceOwnerEmail !== activeUserEmail) {
-        alert("🔒 Security Violation Blocked!\n\nThis Device ID is registered to another factory email profile account context. Access denied.");
-        logout();
-        return;
+        // Active email is different! Check if guest session is already verified locally
+        if (!userHasReadOnlyPermissions) {
+          let systemSharedAccessKey = d.guestCode || "9999";
+          let guestAttempt = prompt("🔒 Shared Device Protection:\nThis unit belongs to " + currentDeviceOwnerEmail + "\n\nPlease input your 4-digit Guest Share Code to control the unit:");
+          
+          if (guestAttempt === systemSharedAccessKey) {
+            userHasReadOnlyPermissions = true; // Grant Read + Manual Overrides execution rights
+            alert("✅ Guest access verified! Running in Monitoring and Manual Control mode.");
+          } else {
+            alert("❌ Invalid Share Code. Session connection disconnected.");
+            logout();
+            return;
+          }
+        }
+      }
+
+      // Enforcement layout changes depending on user level clearances
+      if (userHasReadOnlyPermissions) {
+        document.getElementById("saveConfigBtn").disabled = true;
+        document.getElementById("saveConfigBtn").textContent = "🔒 Settings Locked by Owner";
+        document.getElementById("saveConfigBtn").style.backgroundColor = "#555";
+        document.getElementById("shareDeviceBtn").style.display = "none";
+        document.getElementById("transferDeviceBtn").style.display = "none";
       }
 
       let minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
@@ -462,6 +481,8 @@
     }
 
     function saveTargetAndSequencePreferences() {
+      if (userHasReadOnlyPermissions) return alert("Security Violation Blocked: Guest accounts cannot edit variables.");
+
       let devIdField = document.getElementById("deviceIDInput").value.trim();
       if (devIdField === "RESET") {
         localStorage.setItem("admin_lock_pass", "1234");
@@ -495,13 +516,12 @@
         return;
       }
 
-      // Automatically capture user's active session email mapping identity block
       let currentLoggedSessionUser = auth ? auth.currentUser.email : "sandbox@test.com";
 
       let updatePayload = {
         targetHumidityMin: minHumInput,
         targetHumidityMax: maxHumInput,
-        deviceOwner: currentLoggedSessionUser, // Seal identity validation profile signature
+        deviceOwner: currentLoggedSessionUser, 
         moisture: 4.0, 
         temp: 24.5,
         humidity: 48.2,
@@ -554,8 +574,25 @@
       }
     }
 
-    // NEW: Ownership Release Command execution logic loop framework routine module
+    // NEW: Share Code Random Generator Engine Routine
+    function generateGuestShareCode() {
+      if (userHasReadOnlyPermissions) return;
+      
+      // Generate a clean 4 digit secure access code pin
+      let freshlyGeneratedPin = Math.floor(1000 + Math.random() * 9000).toString();
+      
+      if (currentRef) {
+        currentRef.child('guestCode').set(freshlyGeneratedPin).then(() => {
+          alert("🔗 Device Access Code Generated!\n\nGive this exact 4-digit code to your family or junior team members:\n\n👉 " + freshlyGeneratedPin + "\n\nThey can now safely monitor and manually control the machine, but your configurations will stay locked!");
+        });
+      } else {
+        localDeviceState.guestCode = freshlyGeneratedPin;
+        alert("Sandbox Share Code Generated: " + freshlyGeneratedPin);
+      }
+    }
+
     function transferDeviceOwnership() {
+      if (userHasReadOnlyPermissions) return;
       let currentSavedPassword = localStorage.getItem("admin_lock_pass") || "1234";
       let userAttempt = prompt("⚠️ CRITICAL SECURITY ACTION:\nEnter your current ADMIN password to unlock and clear this Device ID registration profile data:");
       
@@ -566,7 +603,6 @@
       }
 
       if (currentRef) {
-        // Clear ownership mapping reference flag securely inside Firebase data paths
         currentRef.child('deviceOwner').remove(function(error) {
           if (error) {
             alert("Transfer failed: " + error.message);
@@ -688,7 +724,7 @@
       localStorage.removeItem('saved_email'); localStorage.removeItem('saved_password');
       if (auth) { auth.signOut().then(() => resetUIState()); } else { resetUIState(); }
     }
-    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; }
+    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; userHasReadOnlyPermissions = false; }
   </script>
 </body>
 </html>
