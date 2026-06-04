@@ -501,12 +501,15 @@
           } else {
             // Optional Choice: Allow password change upon successful save engagement validation passes
             if (confirm("✅ Configuration saved! Would you like to change your Admin Lock Password right now?")) {
-              let newPass = prompt("Type your new password here:");
-              if (newPass && newPass.trim() !== "") {
-                localStorage.setItem("admin_lock_pass", newPass.trim());
-                alert("🔒 Password changed successfully!");
-              }
-            }
+  
+  // This is Prompt 4 (Where you actually type your individual preferred password!)
+  let newPass = prompt("Type your new password here:");
+  
+  if (newPass && newPass.trim() !== "") {
+    localStorage.setItem("admin_lock_pass", newPass.trim()); // Saves it safely
+    alert("🔒 Password changed successfully!"); // This is Prompt 5
+  }
+}
           }
         });
       } else { 
