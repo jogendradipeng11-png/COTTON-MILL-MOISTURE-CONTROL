@@ -650,24 +650,46 @@
       if (isAutoMode) return alert("Deactivate Auto Mode before using overrides.");
       if (currentRef) {
         currentRef.child('pump').once('value', snap => {
-          const nextState = (snap.val() === 'ON') ? 'OFF' : 'ON';
-          currentRef.child('pump').set(nextState);
+          const currentPump = snap.val() || 'OFF';
+          const nextState = (currentPump === 'ON') ? 'OFF' : 'ON';
+          
+          // SAFETY RULE: If switching pump to OFF, force nozzles down to 0 automatically
+          if (nextState === 'OFF') {
+            currentRef.update({
+              pump: 'OFF',
+              nozzles: 0
+            });
+          } else {
+            currentRef.child('pump').set('ON');
+          }
         });
       } else {
         localDeviceState.pump = (localDeviceState.pump === 'ON') ? 'OFF' : 'ON';
+        if (localDeviceState.pump === 'OFF') localDeviceState.nozzles = 0;
         renderDashboardMetrics(localDeviceState);
       }
     }
 
     function toggleNozzle(n) {
       if (isAutoMode) return alert("Deactivate Auto Mode before using overrides.");
+      
       if (currentRef) {
-        currentRef.child('nozzles').once('value', snap => {
-          let currentNozzles = parseInt(snap.val()) || 0;
+        // Intercept check: Verify pump condition before executing adjustments
+        currentRef.once('value', snap => {
+          const d = snap.val() || {};
+          if (d.pump !== 'ON') {
+            return alert("Operation Blocked: Cannot activate hydration nozzles while main Pump is turned OFF!");
+          }
+          
+          let currentNozzles = parseInt(d.nozzles) || 0;
           let nextNozzles = (currentNozzles >= n) ? n - 1 : n;
           currentRef.child('nozzles').set(nextNozzles);
         });
       } else {
+        // Sandbox environment logic checks
+        if (localDeviceState.pump !== 'ON') {
+          return alert("Operation Blocked: Cannot activate hydration nozzles while main Pump is turned OFF!");
+        }
         let currentNozzles = localDeviceState.nozzles;
         localDeviceState.nozzles = (currentNozzles >= n) ? n - 1 : n;
         renderDashboardMetrics(localDeviceState);
