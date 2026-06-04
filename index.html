@@ -84,13 +84,18 @@
 
     .target-box { background: rgba(255, 193, 7, 0.1); border: 1px solid var(--btn-warning); padding: 15px; border-radius: 12px; margin-bottom: 15px; }
     .target-box label { font-size: 0.9rem; color: #ffc107; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 5px; }
-    .target-box input { background: rgba(0,0,0,0.4); border: 1px solid #ffc107; color: #fff; font-size: 1.3rem; font-weight: bold; text-align: center; border-radius: 6px; padding: 8px; }
+    .range-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .target-box input { background: rgba(0,0,0,0.4); border: 1px solid #ffc107; color: #fff; font-size: 1.2rem; font-weight: bold; text-align: center; border-radius: 6px; padding: 8px; }
 
     .sequence-box { background: rgba(23, 162, 184, 0.1); border: 1px solid var(--btn-info); padding: 15px; border-radius: 12px; margin-bottom: 15px; }
     .sequence-box h3 { margin: 0 0 10px 0; font-size: 0.9rem; color: #17a2b8; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
-    .seq-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; text-align: center; margin-bottom: 12px; }
-    .seq-item label { font-size: 0.75rem; color: #bbb; display: block; margin-bottom: 4px; }
-    .seq-item select { width: 100%; background: #111; color: white; border: 1px solid #17a2b8; padding: 6px; border-radius: 4px; font-size: 0.9rem; font-weight: bold; }
+    
+    /* Sequence row structural modifications to support range inputs */
+    .seq-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px; }
+    .seq-block { display: grid; grid-template-columns: 80px 1fr 1fr; gap: 8px; align-items: center; background: rgba(0,0,0,0.2); padding: 6px 10px; border-radius: 6px; }
+    .seq-block span { font-size: 0.8rem; color: #ccc; font-weight: bold; }
+    .seq-block select { width: 100%; background: #111; color: white; border: 1px solid #17a2b8; padding: 6px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; }
+    .seq-block input { width: 100%; background: #111; color: #00ffcc; border: 1px solid #17a2b8; padding: 5px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; text-align: center; margin: 0; }
 
     .btn-save-cfg { background-color: #00cc88; color: white; margin: 5px 0 0 0; font-size: 1rem; border-radius: 8px; padding: 12px; font-weight: bold; }
 
@@ -169,28 +174,41 @@
             <h2>Operations Management</h2>
             
             <div class="target-box">
-              <label>Desired Target Humidity (%)</label>
-              <input type="number" id="targetHumidityInput" min="10" max="95" value="60">
+              <label>Target Humidity Range (%)</label>
+              <div class="range-inputs">
+                <div>
+                  <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MIN (Start Pump)</span>
+                  <input type="number" id="targetHumidityMin" min="10" max="95" value="55">
+                </div>
+                <div>
+                  <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MAX (Stop Pump)</span>
+                  <input type="number" id="targetHumidityMax" min="10" max="95" value="65">
+                </div>
+              </div>
             </div>
 
             <div class="sequence-box">
-              <h3>Auto Nozzle Sequence Settings</h3>
+              <h3>Auto Nozzle Sequence & Ranges</h3>
               <div class="seq-row">
-                <div class="seq-item">
-                  <label>1st (Low)</label>
+                <div class="seq-block">
+                  <span>1st Priority</span>
                   <select id="seq1"></select>
+                  <input type="number" id="range1" min="0" max="30" placeholder="Deficit %" title="Triggers when below Target Max minus this value">
                 </div>
-                <div class="seq-item">
-                  <label>2nd (Med)</label>
+                <div class="seq-block">
+                  <span>2nd Priority</span>
                   <select id="seq2"></select>
+                  <input type="number" id="range2" min="0" max="30" placeholder="Deficit %">
                 </div>
-                <div class="seq-item">
-                  <label>3rd (High)</label>
+                <div class="seq-block">
+                  <span>3rd Priority</span>
                   <select id="seq3"></select>
+                  <input type="number" id="range3" min="0" max="30" placeholder="Deficit %">
                 </div>
-                <div class="seq-item">
-                  <label>4th (Max)</label>
+                <div class="seq-block">
+                  <span>4th Priority</span>
                   <select id="seq4"></select>
+                  <input type="number" id="range4" min="0" max="30" placeholder="Deficit %">
                 </div>
               </div>
               <button class="btn-save-cfg" onclick="saveTargetAndSequencePreferences()">💾 Save Configuration</button>
@@ -216,21 +234,16 @@
   </div>
 
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
-      authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
-      projectId: "cotoon-mill-moisture-control",
-      storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
-      messagingSenderId: "963386638721",
-      appId: "1:963386638721:web:7bf38960d8ff5987132880",
-      measurementId: "G-WZEW8L9SMB"
-    };
-
     let db, auth, currentRef = null;
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    let localDeviceState = { moisture: 6.2, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO", targetHumidity: 60, sequence: "1234" };
+    // Enhanced local sandbox state configuration values matching range targets
+    let localDeviceState = { 
+      moisture: 6.2, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO", 
+      targetHumidityMin: 55, targetHumidityMax: 65,
+      sequence: "1234", ranges: "02051015" // Compact representation of offset limits (2%, 5%, 10%, 15%)
+    };
 
     window.addEventListener('DOMContentLoaded', () => {
       populateDropMenus(["1","2","3","4"]);
@@ -251,17 +264,15 @@
       }
     });
 
-    // Modified to support an independent NIL configuration index parameter choice option
     function populateDropMenus(arr) {
       for(let i=1; i<=4; i++) {
         let sel = document.getElementById("seq" + i);
         let selectedValue = arr[i-1] || "0";
         sel.innerHTML = "";
         
-        // Option 0: NIL / Empty parameter option marker
         let optNil = document.createElement("option");
         optNil.value = "0"; optNil.textContent = "NIL";
-        if(selectedValue == "0" || selectedValue == "X") optNil.selected = true;
+        if(selectedValue == "0") optNil.selected = true;
         sel.appendChild(optNil);
 
         for(let j=1; j<=4; j++) {
@@ -336,17 +347,23 @@
     function renderDashboardMetrics(d) {
       const moistureVal = typeof d.moisture === 'number' ? d.moisture : parseFloat(d.moisture) || 0;
       const pumpState = d.pump || 'OFF';
-      const targetHum = typeof d.targetHumidity === 'number' ? d.targetHumidity : parseInt(d.targetHumidity) || 60;
+      const minHum = typeof d.targetHumidityMin === 'number' ? d.targetHumidityMin : 55;
+      const maxHum = typeof d.targetHumidityMax === 'number' ? d.targetHumidityMax : 65;
       const seqStr = (d.sequence || "1234").padEnd(4, '0');
       
-      // Update fields only if they aren't currently being modified by the user
-      if (document.activeElement !== document.getElementById('targetHumidityInput')) {
-        document.getElementById('targetHumidityInput').value = targetHum;
-      }
+      // Parse multi-range string into inputs (e.g. "02051015")
+      let rangeStr = d.ranges || "02051015";
+      if(rangeStr.length < 8) rangeStr = "02051015";
+
+      if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
+      if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
       
-      // Update drop menus only if they aren't currently focused by user selection actions
-      if (document.activeElement.tagName !== 'SELECT') {
+      if (document.activeElement.tagName !== 'SELECT' && document.activeElement.tagName !== 'INPUT') {
         populateDropMenus(seqStr.split(''));
+        document.getElementById('range1').value = parseInt(rangeStr.substring(0,2));
+        document.getElementById('range2').value = parseInt(rangeStr.substring(2,4));
+        document.getElementById('range3').value = parseInt(rangeStr.substring(4,6));
+        document.getElementById('range4').value = parseInt(rangeStr.substring(6,8));
       }
 
       let nozzleString = "0000";
@@ -396,17 +413,20 @@
       }
     }
 
-    // NEW: Handles joint validation and database synchronization on click of "Save Configuration"
     function saveTargetAndSequencePreferences() {
-      let humInput = document.getElementById("targetHumidityInput").value;
-      let targetVal = parseInt(humInput) || 60;
+      let minHumInput = parseInt(document.getElementById("targetHumidityMin").value) || 55;
+      let maxHumInput = parseInt(document.getElementById("targetHumidityMax").value) || 65;
+
+      if (minHumInput >= maxHumInput) {
+        alert("Configuration Error: Minimum Range limit must be lower than Maximum Range limit parameter values.");
+        return;
+      }
 
       let s1 = document.getElementById("seq1").value;
       let s2 = document.getElementById("seq2").value;
       let s3 = document.getElementById("seq3").value;
       let s4 = document.getElementById("seq4").value;
       
-      // Duplication Verification Validation: Exclude "0" (NIL) tracking from duplication collision checks
       let checkArr = [];
       if (s1 !== "0") checkArr.push(s1);
       if (s2 !== "0") checkArr.push(s2);
@@ -415,24 +435,34 @@
 
       let uniqueSet = new Set(checkArr);
       if(uniqueSet.size !== checkArr.length) {
-        alert("Configuration Error: You cannot assign the same Nozzle to multiple priorities. Set extra slots to NIL instead.");
+        alert("Configuration Error: Duplicate nozzle selections detected. Clear extra slots to NIL.");
         return;
       }
 
-      // Format sequence string (e.g. "1200", "4103")
+      // Format individual activation delta threshold fields securely
+      let r1 = String(Math.abs(parseInt(document.getElementById('range1').value) || 0)).padStart(2,'0');
+      let r2 = String(Math.abs(parseInt(document.getElementById('range2').value) || 0)).padStart(2,'0');
+      let r3 = String(Math.abs(parseInt(document.getElementById('range3').value) || 0)).padStart(2,'0');
+      let r4 = String(Math.abs(parseInt(document.getElementById('range4').value) || 0)).padStart(2,'0');
+
       let builtSeq = s1 + s2 + s3 + s4;
+      let builtRanges = r1 + r2 + r3 + r4;
 
       if (currentRef) { 
         currentRef.update({
-          targetHumidity: targetVal,
-          sequence: builtSeq
+          targetHumidityMin: minHumInput,
+          targetHumidityMax: maxHumInput,
+          sequence: builtSeq,
+          ranges: builtRanges
         }).then(() => {
-          alert("✅ Configuration Profile saved and synced successfully!");
+          alert("✅ Configuration Range Profile synced completely!");
         }).catch(e => alert("Database Sync Error: " + e.message));
       } else { 
-        localDeviceState.targetHumidity = targetVal; 
+        localDeviceState.targetHumidityMin = minHumInput; 
+        localDeviceState.targetHumidityMax = maxHumInput;
         localDeviceState.sequence = builtSeq;
-        alert("✅ Local Sandbox Profile simulation properties cached successfully!");
+        localDeviceState.ranges = builtRanges;
+        alert("✅ Local Sandbox Profile configurations cached successfully!");
       }
     }
 
@@ -479,37 +509,60 @@
 
     function startSandboxSimulation() {
       if (sandboxInterval) clearInterval(sandboxInterval);
+      
+      let systemPumpActive = false; // Internal hysteresis tracking state variable
+
       sandboxInterval = setInterval(() => {
         if (localDeviceState.mode === 'AUTO') {
-          if (localDeviceState.humidity < localDeviceState.targetHumidity) {
+          let currentHum = localDeviceState.humidity;
+          
+          // Hysteresis calculation loop: Pump starts below MIN value, turns off above MAX
+          if (currentHum < localDeviceState.targetHumidityMin) {
+            systemPumpActive = true;
+          } else if (currentHum >= localDeviceState.targetHumidityMax) {
+            systemPumpActive = false;
+          }
+
+          if (systemPumpActive) {
             localDeviceState.pump = "ON";
-            let diff = localDeviceState.targetHumidity - localDeviceState.humidity;
             let order = localDeviceState.sequence.split(''); 
+            let r1 = parseInt(localDeviceState.ranges.substring(0,2));
+            let r2 = parseInt(localDeviceState.ranges.substring(2,4));
+            let r3 = parseInt(localDeviceState.ranges.substring(4,6));
+            let r4 = parseInt(localDeviceState.ranges.substring(6,8));
+            let offsetLimits = [r1, r2, r3, r4];
+
             let nMask = ['0','0','0','0'];
 
-            let loadCount = 1;
-            if (diff > 15) loadCount = 4;
-            else if (diff > 10) loadCount = 3;
-            else if (diff > 5) loadCount = 2;
-
-            for(let i=0; i < loadCount; i++) {
+            // Loop through each step to see if current context warrants structural nozzle assignment activation
+            for(let i=0; i < 4; i++) {
               if (order[i] !== '0') {
-                let targetNozzleIdx = parseInt(order[i]) - 1;
-                nMask[targetNozzleIdx] = '1';
+                let activationThresholdValue = localDeviceState.targetHumidityMax - offsetLimits[i];
+                if (currentHum < activationThresholdValue) {
+                  let targetNozzleIdx = parseInt(order[i]) - 1;
+                  nMask[targetNozzleIdx] = '1';
+                }
               }
             }
             localDeviceState.nozzles = nMask.join('');
           } else {
-            localDeviceState.nozzles = "0000"; localDeviceState.pump = "OFF";
+            localDeviceState.nozzles = "0000"; 
+            localDeviceState.pump = "OFF";
           }
         }
+        
         let activeCount = (localDeviceState.nozzles.match(/1/g) || []).length;
         if (localDeviceState.pump === "ON" && activeCount > 0) {
-          localDeviceState.humidity += (0.1 * activeCount);
+          localDeviceState.humidity += (0.12 * activeCount);
           localDeviceState.moisture += (0.02 * activeCount);
         } else {
-          localDeviceState.humidity -= 0.08; localDeviceState.moisture -= 0.01;
+          localDeviceState.humidity -= 0.08; 
+          localDeviceState.moisture -= 0.01;
         }
+
+        if (localDeviceState.humidity < 20.0) localDeviceState.humidity = 20.0;
+        if (localDeviceState.humidity > 98.0) localDeviceState.humidity = 98.0;
+
         renderDashboardMetrics(localDeviceState);
       }, 1000);
     }
