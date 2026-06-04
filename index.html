@@ -259,7 +259,7 @@
             </div>
           </div>
           
-          <div class="ownership-footer">
+          <div class="ownership-footer" id="ownerControlsArea">
             <button onclick="generateGuestShareCode()" style="width:50%; margin:0; padding:8px; font-size:0.8rem; background:#17a2b8; color:white; border-radius:6px;" id="shareDeviceBtn">🔗 Share Device</button>
             <button onclick="transferDeviceOwnership()" style="width:50%; margin:0; padding:8px; font-size:0.8rem; background:#dc3545; color:white; border-radius:6px;" id="transferDeviceBtn">Transfer Device</button>
           </div>
@@ -289,7 +289,7 @@
 
     let hasLoadedExistingConfig = false;
     let currentDeviceOwnerEmail = null; 
-    let userHasReadOnlyPermissions = false; // Guest security toggle switch flag variable
+    let userHasReadOnlyPermissions = false; 
 
     let localDeviceState = { 
       moisture: 4.0, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
@@ -385,31 +385,41 @@
       let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
       currentDeviceOwnerEmail = d.deviceOwner || null;
 
-      // DUAL INTERCEPTOR PROTECTION MATRIX LAYER: Check if logged account matches owner node signatures
+      // FIXED SECURITY ROUTINE: Enforce checking whenever account email differs from stored owner
       if (currentDeviceOwnerEmail !== null && currentDeviceOwnerEmail !== activeUserEmail) {
-        // Active email is different! Check if guest session is already verified locally
         if (!userHasReadOnlyPermissions) {
-          let systemSharedAccessKey = d.guestCode || "9999";
-          let guestAttempt = prompt("🔒 Shared Device Protection:\nThis unit belongs to " + currentDeviceOwnerEmail + "\n\nPlease input your 4-digit Guest Share Code to control the unit:");
+          let systemSharedAccessKey = d.guestCode || "";
+          
+          if (systemSharedAccessKey === "") {
+            alert("🔒 Access Denied:\nThis device has not generated a guest code yet. Please request the Master Owner to generate a code first.");
+            logout();
+            return;
+          }
+
+          let guestAttempt = prompt("🔒 Shared Device Verification:\nThis machine belongs to: " + currentDeviceOwnerEmail + "\n\nPlease type the 4-digit Share Code to gain access:");
           
           if (guestAttempt === systemSharedAccessKey) {
-            userHasReadOnlyPermissions = true; // Grant Read + Manual Overrides execution rights
-            alert("✅ Guest access verified! Running in Monitoring and Manual Control mode.");
+            userHasReadOnlyPermissions = true;
+            alert("✅ Share Code Verified! Guest monitoring access unlocked.");
           } else {
-            alert("❌ Invalid Share Code. Session connection disconnected.");
+            alert("❌ Invalid Code. Connection refused.");
             logout();
             return;
           }
         }
       }
 
-      // Enforcement layout changes depending on user level clearances
+      // Hide all administrative control frames if the account is flagged as a guest layout
       if (userHasReadOnlyPermissions) {
         document.getElementById("saveConfigBtn").disabled = true;
         document.getElementById("saveConfigBtn").textContent = "🔒 Settings Locked by Owner";
         document.getElementById("saveConfigBtn").style.backgroundColor = "#555";
-        document.getElementById("shareDeviceBtn").style.display = "none";
-        document.getElementById("transferDeviceBtn").style.display = "none";
+        document.getElementById("ownerControlsArea").style.display = "none"; // Completely hide sharing buttons from juniors
+      } else {
+        document.getElementById("saveConfigBtn").disabled = false;
+        document.getElementById("saveConfigBtn").textContent = "💾 Save Configuration Settings";
+        document.getElementById("saveConfigBtn").style.backgroundColor = "#00cc88";
+        document.getElementById("ownerControlsArea").style.display = "flex";
       }
 
       let minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
@@ -574,11 +584,9 @@
       }
     }
 
-    // NEW: Share Code Random Generator Engine Routine
     function generateGuestShareCode() {
       if (userHasReadOnlyPermissions) return;
       
-      // Generate a clean 4 digit secure access code pin
       let freshlyGeneratedPin = Math.floor(1000 + Math.random() * 9000).toString();
       
       if (currentRef) {
@@ -658,6 +666,7 @@
       }
     }
 
+    // Unchanged backend telemetry tracking logic loops
     function startSandboxSimulation() {
       if (sandboxInterval) clearInterval(sandboxInterval);
       
