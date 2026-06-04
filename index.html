@@ -370,12 +370,6 @@
         <button onclick="toggleAuthMode()" id="switchBtn" style="background: #555; color: white;">
           Create New Account
         </button>
-
-        <div style="text-align: center; margin: 15px 0; color: #888; font-size: 0.9rem;">— OR —</div>
-
-        <button onclick="signInWithGoogle()" style="background: #db4437; color: white;">
-          Sign in with Google
-        </button>
       </div>
     </div>
 
@@ -458,17 +452,15 @@
 
   <script>
     // Configuration Profile 
-    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
-  authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
-  databaseURL: "https://cotoon-mill-moisture-control-default-rtdb.firebaseio.com",
-  projectId: "cotoon-mill-moisture-control",
-  storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
-  messagingSenderId: "963386638721",
-  appId: "1:963386638721:web:7bf38960d8ff5987132880",
-  measurementId: "G-WZEW8L9SMB"
-};
+    const firebaseConfig = {
+      apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
+      authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
+      projectId: "cotoon-mill-moisture-control",
+      storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
+      messagingSenderId: "963386638721",
+      appId: "1:963386638721:web:7bf38960d8ff5987132880",
+      measurementId: "G-WZEW8L9SMB"
+    };
 
     // Initialize core instances safely
     let db, auth;
@@ -558,26 +550,6 @@ const firebaseConfig = {
           })
           .catch(e => alert("Registration rejected: " + e.message));
       }
-    }
-
-    function signInWithGoogle() {
-      const devID = document.getElementById('deviceIDInput').value.trim() || "cotton_mill_01";
-      
-      if (!auth) {
-        loadDashboard(devID);
-        return;
-      }
-
-      const provider = new firebase.auth.GoogleAuthProvider();
-      auth.signInWithPopup(provider)
-        .then((result) => {
-          if(result.user && result.user.email) {
-            localStorage.setItem('saved_email', result.user.email);
-            document.getElementById('email').value = result.user.email;
-          }
-          loadDashboard(devID);
-        })
-        .catch(e => alert("Google Federated Auth failed: " + e.message));
     }
 
     function loadDashboard(devID) {
