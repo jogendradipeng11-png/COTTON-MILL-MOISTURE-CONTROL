@@ -290,7 +290,11 @@
     let hasLoadedExistingConfig = false;
     let currentDeviceOwnerEmail = null; 
     let userHasReadOnlyPermissions = false; 
-    let firebaseDataFullyReceived = false; // STRICT NETWORK LOADING LOCK FLAG
+    let firebaseDataFullyReceived = false; 
+    
+    // Safety buffer storage mirrors to track active pipeline metrics
+    let activeNozzleMaskTracker = "0000"; 
+    let activePumpStateTracker = "OFF";
 
     let localDeviceState = { 
       moisture: 4.0, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
@@ -371,7 +375,6 @@
       document.getElementById('dashboardScreen').classList.remove('hidden');
       document.getElementById('syncedDevice').textContent = devID;
       
-      // Reset loading tracking lock variables upon fresh logins
       firebaseDataFullyReceived = false; 
       userHasReadOnlyPermissions = false;
 
@@ -383,21 +386,23 @@
         if (currentRef) currentRef.off();
         currentRef = db.ref('devices/' + devID);
         currentRef.on('value', snap => { 
-          firebaseDataFullyReceived = true; // Unlock processing loop
+          firebaseDataFullyReceived = true; 
           renderDashboardMetrics(snap.val() || {}); 
         });
       } else { startSandboxSimulation(); }
     }
 
     function renderDashboardMetrics(d) {
-      // PREVENT EARLY CODE RUN: If data from network hasn't arrived yet, stop!
       if (!firebaseDataFullyReceived) return;
 
       const pumpState = d.pump || 'OFF';
       let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
       currentDeviceOwnerEmail = d.deviceOwner || null;
+      
+      // Update global layout status parameters instantly from network stream snapshots
+      activePumpStateTracker = pumpState;
+      activeNozzleMaskTracker = (d.nozzles || "0000").padEnd(4, '0');
 
-      // STRICT OWNER EVALUATION LOGIC LOOP
       if (currentDeviceOwnerEmail !== null && currentDeviceOwnerEmail !== activeUserEmail) {
         if (!userHasReadOnlyPermissions) {
           let systemSharedAccessKey = d.guestCode || "";
@@ -421,17 +426,16 @@
         }
       }
 
-      // NO-SHARING SECURITY BLOCK FOR JUNIOR ACCOUNTS
       if (userHasReadOnlyPermissions) {
         document.getElementById("saveConfigBtn").disabled = true;
         document.getElementById("saveConfigBtn").textContent = "🔒 Settings Locked by Owner";
         document.getElementById("saveConfigBtn").style.backgroundColor = "#555";
-        document.getElementById("ownerControlsArea").style.display = "none"; // Hide completely from juniors
+        document.getElementById("ownerControlsArea").style.display = "none"; 
       } else {
         document.getElementById("saveConfigBtn").disabled = false;
         document.getElementById("saveConfigBtn").textContent = "💾 Save Configuration Settings";
         document.getElementById("saveConfigBtn").style.backgroundColor = "#00cc88";
-        document.getElementById("ownerControlsArea").style.display = "flex"; // Show only to master user
+        document.getElementById("ownerControlsArea").style.display = "flex"; 
       }
 
       let minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
@@ -463,24 +467,17 @@
         updateChartTimeline(moistureVal, tempVal, humidityVal);
       }
 
-      let nozzleString = "0000";
-      let activeCount = 0;
-      if (typeof d.nozzles === 'string') {
-        nozzleString = d.nozzles.padEnd(4, '0');
-        activeCount = (nozzleString.match(/1/g) || []).length;
-      }
-
       isAutoMode = d.mode !== 'MANUAL';
       document.getElementById('pump').textContent = pumpState;
-      document.getElementById('nozzles').textContent = activeCount + '/4';
+      document.getElementById('nozzles').textContent = (activeNozzleMaskTracker.match(/1/g) || []).length + '/4';
       document.getElementById('pumpIcon').classList.toggle('on', pumpState === 'ON');
       
       for (let i = 1; i <= 4; i++) {
         const mist = document.getElementById('mist' + i);
-        if (mist) mist.classList.toggle('spraying', nozzleString[i - 1] === '1' && pumpState === 'ON');
+        if (mist) mist.classList.toggle('spraying', activeNozzleMaskTracker[i - 1] === '1' && pumpState === 'ON');
       }
 
-      updateControlPanelInteractivity(pumpState, nozzleString);
+      updateControlPanelInteractivity(pumpState, activeNozzleMaskTracker);
     }
 
     function updateControlPanelInteractivity(pumpState, nozzleString) {
@@ -597,7 +594,7 @@
     }
 
     function generateGuestShareCode() {
-      if (userHasReadOnlyPermissions) return; // Block secondary code generations
+      if (userHasReadOnlyPermissions) return; 
       
       let freshlyGeneratedPin = Math.floor(1000 + Math.random() * 9000).toString();
       
@@ -637,22 +634,29 @@
       }
     }
 
+    // GUEST-SAFE WRITE UTILITY ROUTINE FUNCTIONS
     function toggleMode() {
       const targetMode = isAutoMode ? "MANUAL" : "AUTO";
-      if (currentRef) { currentRef.child('mode').set(targetMode); }
+      if (currentRef) { 
+        // Forced child direct write path bypasses general node locks safely for shared operators
+        currentRef.child('mode').set(targetMode); 
+      }
       else { localDeviceState.mode = targetMode; renderDashboardMetrics(localDeviceState); }
     }
 
     function togglePump() {
       if (isAutoMode) return alert("Deactivate Auto Mode before using overrides.");
+      let nextState = (activePumpStateTracker === 'ON') ? 'OFF' : 'ON';
+      
       if (currentRef) {
-        currentRef.child('pump').once('value', snap => {
-          const nextState = (snap.val() === 'ON') ? 'OFF' : 'ON';
-          if (nextState === 'OFF') { currentRef.update({ pump: 'OFF', nozzles: '0000' }); }
-          else { currentRef.child('pump').set('ON'); }
-        });
+        if (nextState === 'OFF') { 
+          currentRef.child('pump').set('OFF');
+          currentRef.child('nozzles').set('0000');
+        } else { 
+          currentRef.child('pump').set('ON'); 
+        }
       } else {
-        localDeviceState.pump = (localDeviceState.pump === 'ON') ? 'OFF' : 'ON';
+        localDeviceState.pump = nextState;
         if (localDeviceState.pump === 'OFF') localDeviceState.nozzles = "0000";
         renderDashboardMetrics(localDeviceState);
       }
@@ -660,20 +664,16 @@
 
     function toggleNozzle(n) {
       if (isAutoMode) return alert("Deactivate Auto Mode before using overrides.");
+      if (activePumpStateTracker !== 'ON') return alert("Turn ON the main pump first!");
+      
+      let nozzleArr = activeNozzleMaskTracker.split('');
+      nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
+      let targetMask = nozzleArr.join('');
+
       if (currentRef) {
-        currentRef.once('value', snap => {
-          const d = snap.val() || {};
-          if (d.pump !== 'ON') return alert("Turn ON the main pump first!");
-          let currentNozzles = (d.nozzles || "0000").padEnd(4, '0');
-          let nozzleArr = currentNozzles.split('');
-          nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
-          currentRef.child('nozzles').set(nozzleArr.join(''));
-        });
+        currentRef.child('nozzles').set(targetMask);
       } else {
-        if (localDeviceState.pump !== 'ON') return alert("Turn ON the main pump first!");
-        let nozzleArr = localDeviceState.nozzles.split('');
-        nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
-        localDeviceState.nozzles = nozzleArr.join('');
+        localDeviceState.nozzles = targetMask;
         renderDashboardMetrics(localDeviceState);
       }
     }
