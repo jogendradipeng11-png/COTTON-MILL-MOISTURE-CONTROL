@@ -292,7 +292,9 @@
     let userHasReadOnlyPermissions = false; 
     let firebaseDataFullyReceived = false; 
     
-    // Safety buffer storage mirrors to track active pipeline metrics
+    // NEW: Network Response Buffer Lockout Flags
+    let uiActionHoldTimeout = null;
+
     let activeNozzleMaskTracker = "0000"; 
     let activePumpStateTracker = "OFF";
 
@@ -394,12 +396,14 @@
 
     function renderDashboardMetrics(d) {
       if (!firebaseDataFullyReceived) return;
+      
+      // FIXED: If the user just clicked a manual button, do not overwrite the UI colors yet
+      if (uiActionHoldTimeout !== null) return; 
 
       const pumpState = d.pump || 'OFF';
       let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
       currentDeviceOwnerEmail = d.deviceOwner || null;
       
-      // Update global layout status parameters instantly from network stream snapshots
       activePumpStateTracker = pumpState;
       activeNozzleMaskTracker = (d.nozzles || "0000").padEnd(4, '0');
 
@@ -634,13 +638,18 @@
       }
     }
 
-    // GUEST-SAFE WRITE UTILITY ROUTINE FUNCTIONS
+    // HIGH INDEPENDENCE ASYNCHRONOUS TOGGLE ENGINE OVERRIDES
     function toggleMode() {
       const targetMode = isAutoMode ? "MANUAL" : "AUTO";
-      if (currentRef) { 
-        // Forced child direct write path bypasses general node locks safely for shared operators
-        currentRef.child('mode').set(targetMode); 
-      }
+      isAutoMode = (targetMode === "AUTO");
+      
+      // Instantly optimize screen responsiveness layout before data transmits
+      updateControlPanelInteractivity(activePumpStateTracker, activeNozzleMaskTracker);
+      
+      if (uiActionHoldTimeout) clearTimeout(uiActionHoldTimeout);
+      uiActionHoldTimeout = setTimeout(() => { uiActionHoldTimeout = null; }, 1500);
+
+      if (currentRef) { currentRef.child('mode').set(targetMode); }
       else { localDeviceState.mode = targetMode; renderDashboardMetrics(localDeviceState); }
     }
 
@@ -648,6 +657,14 @@
       if (isAutoMode) return alert("Deactivate Auto Mode before using overrides.");
       let nextState = (activePumpStateTracker === 'ON') ? 'OFF' : 'ON';
       
+      activePumpStateTracker = nextState;
+      if (nextState === 'OFF') activeNozzleMaskTracker = "0000";
+      
+      updateControlPanelInteractivity(activePumpStateTracker, activeNozzleMaskTracker);
+      
+      if (uiActionHoldTimeout) clearTimeout(uiActionHoldTimeout);
+      uiActionHoldTimeout = setTimeout(() => { uiActionHoldTimeout = null; }, 1500);
+
       if (currentRef) {
         if (nextState === 'OFF') { 
           currentRef.child('pump').set('OFF');
@@ -668,12 +685,17 @@
       
       let nozzleArr = activeNozzleMaskTracker.split('');
       nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
-      let targetMask = nozzleArr.join('');
+      activeNozzleMaskTracker = nozzleArr.join('');
+
+      updateControlPanelInteractivity(activePumpStateTracker, activeNozzleMaskTracker);
+      
+      if (uiActionHoldTimeout) clearTimeout(uiActionHoldTimeout);
+      uiActionHoldTimeout = setTimeout(() => { uiActionHoldTimeout = null; }, 1500);
 
       if (currentRef) {
-        currentRef.child('nozzles').set(targetMask);
+        currentRef.child('nozzles').set(activeNozzleMaskTracker);
       } else {
-        localDeviceState.nozzles = targetMask;
+        localDeviceState.nozzles = activeNozzleMaskTracker;
         renderDashboardMetrics(localDeviceState);
       }
     }
@@ -744,7 +766,7 @@
       localStorage.removeItem('saved_email'); localStorage.removeItem('saved_password');
       if (auth) { auth.signOut().then(() => resetUIState()); } else { resetUIState(); }
     }
-    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; userHasReadOnlyPermissions = false; firebaseDataFullyReceived = false; }
+    function resetUIState() { document.getElementById('dashboardScreen').classList.add('hidden'); document.getElementById('authScreen').classList.remove('hidden'); hasLoadedExistingConfig = false; userHasReadOnlyPermissions = false; firebaseDataFullyReceived = false; if(uiActionHoldTimeout) clearTimeout(uiActionHoldTimeout); uiActionHoldTimeout = null; }
   </script>
 </body>
 </html>
