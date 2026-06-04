@@ -82,7 +82,11 @@
     .control-panel h2 { margin-top: 0; margin-bottom: 20px; font-size: 1.4rem; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
     .graph-container { margin-top: 25px; background: rgba(0, 0, 0, 0.25); padding: 20px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.1); }
 
-    /* Sequence block configuration box changes */
+    .target-box { background: rgba(255, 193, 7, 0.1); border: 1px solid var(--btn-warning); padding: 15px; border-radius: 12px; margin-bottom: 15px; }
+    .target-box label { font-size: 0.9rem; color: #ffc107; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 5px; }
+    .range-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .target-box input { background: rgba(0,0,0,0.4); border: 1px solid #ffc107; color: #fff; font-size: 1.2rem; font-weight: bold; text-align: center; border-radius: 6px; padding: 8px; }
+
     .sequence-box { background: rgba(23, 162, 184, 0.1); border: 1px solid var(--btn-info); padding: 20px; border-radius: 12px; margin-bottom: 15px; }
     .sequence-box h3 { margin: 0 0 15px 0; font-size: 1rem; color: #17a2b8; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
     
@@ -171,6 +175,20 @@
           <div>
             <h2>Operations Management</h2>
 
+            <div class="target-box">
+              <label>System Target Humidity Range (%)</label>
+              <div class="range-inputs">
+                <div>
+                  <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MIN (Wake System)</span>
+                  <input type="number" id="targetHumidityMin" min="10" max="95" value="55">
+                </div>
+                <div>
+                  <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MAX (Sleep System)</span>
+                  <input type="number" id="targetHumidityMax" min="10" max="95" value="65">
+                </div>
+              </div>
+            </div>
+
             <div class="sequence-box">
               <h3>Auto Nozzle Threshold Windows</h3>
               <div class="seq-row">
@@ -224,7 +242,7 @@
                 </div>
 
               </div>
-              <button class="btn-save-cfg" onclick="saveTargetAndSequencePreferences()">💾 Save Threshold Configurations</button>
+              <button class="btn-save-cfg" onclick="saveTargetAndSequencePreferences()">💾 Save Configuration Settings</button>
             </div>
 
             <button id="modeBtn" onclick="toggleMode()" class="btn-auto">AUTO RUN MODE</button>
@@ -251,10 +269,9 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // Local Sandbox State Engine Parameters
     let localDeviceState = { 
       moisture: 6.2, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
-      // Threshold parameters stored explicitly per item profile
+      targetHumidityMin: 55, targetHumidityMax: 65,
       start1: 50, stop1: 60,
       start2: 45, stop2: 58,
       start3: 40, stop3: 55,
@@ -342,8 +359,12 @@
     function renderDashboardMetrics(d) {
       const moistureVal = typeof d.moisture === 'number' ? d.moisture : parseFloat(d.moisture) || 0;
       const pumpState = d.pump || 'OFF';
+      const minHum = d.targetHumidityMin !== undefined ? d.targetHumidityMin : localDeviceState.targetHumidityMin;
+      const maxHum = d.targetHumidityMax !== undefined ? d.targetHumidityMax : localDeviceState.targetHumidityMax;
+
+      if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
+      if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
       
-      // Sync threshold input structures from incoming snapshots securely
       for(let i=1; i<=4; i++) {
         if (document.activeElement !== document.getElementById('start' + i)) {
           document.getElementById('start' + i).value = d['start' + i] !== undefined ? d['start' + i] : localDeviceState['start' + i];
@@ -401,14 +422,25 @@
     }
 
     function saveTargetAndSequencePreferences() {
-      let updatePayload = {};
+      let minHumInput = parseInt(document.getElementById("targetHumidityMin").value) || 55;
+      let maxHumInput = parseInt(document.getElementById("targetHumidityMax").value) || 65;
+
+      if (minHumInput >= maxHumInput) {
+        alert("Configuration Error: System Minimum target must be lower than the Maximum sleep parameter.");
+        return;
+      }
+
+      let updatePayload = {
+        targetHumidityMin: minHumInput,
+        targetHumidityMax: maxHumInput
+      };
       
       for(let i=1; i<=4; i++) {
         let startVal = parseInt(document.getElementById('start' + i).value) || 0;
         let stopVal = parseInt(document.getElementById('stop' + i).value) || 0;
         
         if (startVal >= stopVal) {
-          alert("Configuration Conflict: Start value for Nozzle " + i + " must be lower than its corresponding Stop target.");
+          alert("Configuration Conflict: Start limit for Nozzle " + i + " must be strictly lower than its Stop value.");
           return;
         }
         
@@ -418,11 +450,11 @@
 
       if (currentRef) { 
         currentRef.update(updatePayload).then(() => {
-          alert("✅ Window range properties updated and verified successfully!");
+          alert("✅ System range profiles and nozzle targets saved successfully!");
         }).catch(e => alert("Database Sync Error: " + e.message));
       } else { 
         Object.assign(localDeviceState, updatePayload);
-        alert("✅ Range data parameters cached to sandbox runtime model context.");
+        alert("✅ Range parameters synchronized to sandbox layout context.");
       }
     }
 
@@ -470,37 +502,44 @@
     function startSandboxSimulation() {
       if (sandboxInterval) clearInterval(sandboxInterval);
       
-      // Maintain persistent nozzle tracking arrays for independent deadband windows
+      let systemMasterWake = false; 
       let activeStateArray = [false, false, false, false];
 
       sandboxInterval = setInterval(() => {
         let currentHum = localDeviceState.humidity;
 
         if (localDeviceState.mode === 'AUTO') {
-          let maskOutput = "";
-          let anyActive = false;
+          // 1. Master System Deadband Range Verification
+          if (currentHum < localDeviceState.targetHumidityMin) {
+            systemMasterWake = true;
+          } else if (currentHum >= localDeviceState.targetHumidityMax) {
+            systemMasterWake = false;
+          }
 
+          let maskOutput = "";
+          let anyActiveNozzle = false;
+
+          // 2. Individual Component Windows Processing Loops
           for(let i=1; i<=4; i++) {
             let startLimit = localDeviceState['start' + i];
             let stopLimit = localDeviceState['stop' + i];
 
-            // Core Range Window Automation Logic Evaluation Block
-            if (currentHum < startLimit) {
+            if (currentHum < startLimit && systemMasterWake) {
               activeStateArray[i-1] = true;
-            } else if (currentHum > stopLimit) {
+            } else if (currentHum > stopLimit || !systemMasterWake) {
               activeStateArray[i-1] = false;
             }
 
             if(activeStateArray[i-1]) {
               maskOutput += "1";
-              anyActive = true;
+              anyActiveNozzle = true;
             } else {
               maskOutput += "0";
             }
           }
 
           localDeviceState.nozzles = maskOutput;
-          localDeviceState.pump = anyActive ? "ON" : "OFF";
+          localDeviceState.pump = anyActiveNozzle ? "ON" : "OFF";
         }
         
         let activeCount = (localDeviceState.nozzles.match(/1/g) || []).length;
