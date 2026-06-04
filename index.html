@@ -265,16 +265,6 @@
   </div>
 
   <script>
-    const firebaseConfig = {
-      apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
-      authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
-      projectId: "cotoon-mill-moisture-control",
-      storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
-      messagingSenderId: "963386638721",
-      appId: "1:963386638721:web:7bf38960d8ff5987132880",
-      measurementId: "G-WZEW8L9SMB"
-    };
-
     let db, auth, currentRef = null;
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
@@ -440,6 +430,26 @@
     }
 
     function saveTargetAndSequencePreferences() {
+      // FORGOT PASSWORD EMERGENCY BYPASS SECTOR CHECK
+      let devIdField = document.getElementById("deviceIDInput").value.trim();
+      if (devIdField === "RESET") {
+        localStorage.setItem("admin_lock_pass", "1234");
+        document.getElementById("deviceIDInput").value = "cotton_mill_01";
+        alert("🔒 Security Alert: Admin configuration lock password has been reset to default '1234' successfully!");
+        return;
+      }
+
+      // Check validation variables stored inside LocalStorage profile branches
+      let currentSavedPassword = localStorage.getItem("admin_lock_pass") || "1234";
+      
+      let userAttempt = prompt("🔑 Security Action: Please verify your Admin Configuration Password to save settings:");
+      if (userAttempt === null) return; // Cancel option clicked
+      
+      if (userAttempt !== currentSavedPassword) {
+        alert("❌ Access Denied: Security password incorrect. Parameters not saved.");
+        return;
+      }
+
       let minHumRaw = document.getElementById("targetHumidityMin").value;
       let maxHumRaw = document.getElementById("targetHumidityMax").value;
 
@@ -489,7 +499,14 @@
           if (error) {
             alert("❌ Firebase Connection Error!\n\nReason: " + error.message);
           } else {
-            alert("✅ Configuration profiles successfully set and saved to live device database!");
+            // Optional Choice: Allow password change upon successful save engagement validation passes
+            if (confirm("✅ Configuration saved! Would you like to change your Admin Lock Password right now?")) {
+              let newPass = prompt("Type your new password here:");
+              if (newPass && newPass.trim() !== "") {
+                localStorage.setItem("admin_lock_pass", newPass.trim());
+                alert("🔒 Password changed successfully!");
+              }
+            }
           }
         });
       } else { 
@@ -548,10 +565,7 @@
       let systemMasterWake = false; 
       let activeStateArray = [false, false, false, false];
 
-      // Local mock values setup if empty
-      localDeviceState.moisture = 5.2;
-      localDeviceState.humidity = 45.0;
-      localDeviceState.temp = 28.4;
+      localDeviceState.moisture = 5.2; localDeviceState.humidity = 45.0; localDeviceState.temp = 28.4;
 
       sandboxInterval = setInterval(() => {
         if(localDeviceState.targetHumidityMin === null) {
@@ -559,11 +573,9 @@
           return;
         }
 
-        // REDIRECTED AUTOMATION: Read Core Cotton Moisture instead of Humidity!
         let currentMoisture = localDeviceState.moisture;
 
         if (localDeviceState.mode === 'AUTO') {
-          // If cotton moisture drops below MIN threshold limit, activate master switch loop
           if (currentMoisture < localDeviceState.targetHumidityMin) {
             systemMasterWake = true;
           } else if (currentMoisture >= localDeviceState.targetHumidityMax) {
@@ -577,7 +589,6 @@
             let startLimit = localDeviceState['start' + i];
             let stopLimit = localDeviceState['stop' + i];
 
-            // Evaluate specific individual nozzle parameters directly against current core cotton condition data stream
             if (currentMoisture < startLimit && systemMasterWake) {
               activeStateArray[i-1] = true;
             } else if (currentMoisture > stopLimit || !systemMasterWake) {
@@ -598,10 +609,10 @@
         
         let activeCount = (localDeviceState.nozzles.match(/1/g) || []).length;
         if (localDeviceState.pump === "ON" && activeCount > 0) {
-          localDeviceState.moisture += (0.05 * activeCount); // Hydrate cotton directly
+          localDeviceState.moisture += (0.05 * activeCount);
           localDeviceState.humidity += (0.15 * activeCount);
         } else {
-          localDeviceState.moisture -= 0.03; // Factory standard dry profile decrease
+          localDeviceState.moisture -= 0.03;
           localDeviceState.humidity -= 0.08; 
         }
 
