@@ -100,6 +100,9 @@
     .seq-block input { width: 100%; background: #111; color: #00ffcc; border: 1px solid #17a2b8; padding: 8px; border-radius: 4px; font-size: 0.85rem; font-weight: bold; text-align: center; margin: 0; height: 38px; }
 
     .btn-save-cfg { background-color: #00cc88; color: white; margin: 5px 0 0 0; font-size: 1rem; border-radius: 8px; padding: 14px; font-weight: bold; border: none; width: 100%; cursor: pointer; }
+    
+    /* Ownership Transfer Element Style Block */
+    .ownership-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; background: rgba(220, 53, 69, 0.1); padding: 10px; border-radius: 10px; border: 1px dashed var(--btn-danger); }
 
     input, button { width: 100%; padding: 14px; margin: 8px 0; border: none; border-radius: 8px; font-size: 1.05rem; box-sizing: border-box; }
     input { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; transition: all 0.3s; }
@@ -180,11 +183,11 @@
               <div class="range-inputs">
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MIN (Wake System)</span>
-                  <input type="number" id="targetHumidityMin" min="0" max="95" value="4">
+                  <input type="number" id="targetHumidityMin" min="0" max="95" placeholder="Type MIN%">
                 </div>
                 <div>
                   <span style="font-size:0.75rem; color:#aaa; display:block; text-align:center;">MAX (Sleep System)</span>
-                  <input type="number" id="targetHumidityMax" min="0" max="95" value="9">
+                  <input type="number" id="targetHumidityMax" min="0" max="95" placeholder="Type MAX%">
                 </div>
               </div>
             </div>
@@ -197,11 +200,11 @@
                   <span>Nozzle 1</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start1" min="0" max="95" value="4">
+                    <input type="number" id="start1" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop1" min="0" max="95" value="9">
+                    <input type="number" id="stop1" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -209,11 +212,11 @@
                   <span>Nozzle 2</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start2" min="0" max="95" value="4">
+                    <input type="number" id="start2" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop2" min="0" max="95" value="7">
+                    <input type="number" id="stop2" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -221,11 +224,11 @@
                   <span>Nozzle 3</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start3" min="0" max="95" value="4">
+                    <input type="number" id="start3" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop3" min="0" max="95" value="6">
+                    <input type="number" id="stop3" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -233,11 +236,11 @@
                   <span>Nozzle 4</span>
                   <div class="seq-inputs">
                     <label>Start (%)</label>
-                    <input type="number" id="start4" min="0" max="95" value="4">
+                    <input type="number" id="start4" min="0" max="95" placeholder="Start%">
                   </div>
                   <div class="seq-inputs">
                     <label>Stop (%)</label>
-                    <input type="number" id="stop4" min="0" max="95" value="5">
+                    <input type="number" id="stop4" min="0" max="95" placeholder="Stop%">
                   </div>
                 </div>
 
@@ -256,6 +259,12 @@
               <button id="noz4Btn" onclick="toggleNozzle(4)" class="btn-off">Nozzle 4: OFF</button>
             </div>
           </div>
+          
+          <div class="ownership-footer">
+            <span style="font-size: 0.75rem; color: #ff5e62;">Device Lock Active</span>
+            <button onclick="transferDeviceOwnership()" style="width:auto; margin:0; padding:6px 12px; font-size:0.75rem; background:#dc3545; color:white; border-radius:4px;">Transfer Device</button>
+          </div>
+
           <div style="font-size: 0.8rem; color: #888; text-align: center; margin-top: 20px; line-height: 1.4;">
             Device Session Sync: Active <br><span id="syncedDevice" style="color:#00ffcc;">None</span>
           </div>
@@ -279,14 +288,17 @@
     let isAutoMode = true, isLoginMode = true, sandboxInterval = null, telemetryChart = null;
     const MAX_GRAPH_POINTS = 20;
 
-    // Fixed configuration flag layer
+    let hasLoadedExistingConfig = false;
+    let currentDeviceOwnerEmail = null; // Protection cache tracking pointer variable
+
     let localDeviceState = { 
       moisture: 4.0, pump: "OFF", nozzles: "0000", temp: 24.5, humidity: 48.2, mode: "AUTO",
       targetHumidityMin: 4, targetHumidityMax: 9,
       start1: 4, stop1: 9,
       start2: 4, stop2: 7,
       start3: 4, stop3: 6,
-      start4: 4, stop4: 5
+      start4: 4, stop4: 5,
+      deviceOwner: null
     };
 
     window.addEventListener('DOMContentLoaded', () => {
@@ -370,22 +382,33 @@
     function renderDashboardMetrics(d) {
       const pumpState = d.pump || 'OFF';
       
-      // CRITICAL FIX: If values in Firebase are completely absent, empty, or zero, 
-      // do not overwrite the display text box entries! Let them show your typed values.
+      // CRITICAL SECURITY INTERCEPTOR LAYER: Verify master entry record properties
+      let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
+      currentDeviceOwnerEmail = d.deviceOwner || null;
+
+      // If a separate account tries accessing an established path, immediately force logout protection kick rules
+      if (currentDeviceOwnerEmail !== null && currentDeviceOwnerEmail !== activeUserEmail) {
+        alert("🔒 Security Violation Blocked!\n\nThis Device ID is registered to another factory email profile account context. Access denied.");
+        logout();
+        return;
+      }
+
       let minHum = (d.targetHumidityMin !== undefined && d.targetHumidityMin !== null) ? d.targetHumidityMin : "";
       let maxHum = (d.targetHumidityMax !== undefined && d.targetHumidityMax !== null) ? d.targetHumidityMax : "";
 
       if (minHum !== "" && maxHum !== "") {
-        if (document.activeElement !== document.getElementById('targetHumidityMin')) document.getElementById('targetHumidityMin').value = minHum;
-        if (document.activeElement !== document.getElementById('targetHumidityMax')) document.getElementById('targetHumidityMax').value = maxHum;
-        for(let i=1; i<=4; i++) {
-          if (document.activeElement !== document.getElementById('start' + i)) document.getElementById('start' + i).value = d['start' + i];
-          if (document.activeElement !== document.getElementById('stop' + i)) document.getElementById('stop' + i).value = d['stop' + i];
+        if (!hasLoadedExistingConfig) {
+          hasLoadedExistingConfig = true; 
+          document.getElementById('targetHumidityMin').value = minHum;
+          document.getElementById('targetHumidityMax').value = maxHum;
+          for(let i=1; i<=4; i++) {
+            document.getElementById('start' + i).value = d['start' + i];
+            document.getElementById('stop' + i).value = d['stop' + i];
+          }
         }
       }
 
       if (d.moisture == undefined || d.moisture == null) {
-        // If the database is missing, it means the hardware sensor loop hasn't connected yet. Show standard zero fallback display safely.
         document.getElementById('moisture').textContent = "4.0%";
         document.getElementById('temp').textContent = "24.5°C";
         document.getElementById('humidity').textContent = "48.2%";
@@ -472,10 +495,14 @@
         return;
       }
 
+      // Automatically capture user's active session email mapping identity block
+      let currentLoggedSessionUser = auth ? auth.currentUser.email : "sandbox@test.com";
+
       let updatePayload = {
         targetHumidityMin: minHumInput,
         targetHumidityMax: maxHumInput,
-        moisture: 4.0, // Force initialization telemetry so "Device Not Added" disappears instantly
+        deviceOwner: currentLoggedSessionUser, // Seal identity validation profile signature
+        moisture: 4.0, 
         temp: 24.5,
         humidity: 48.2,
         mode: "AUTO",
@@ -504,8 +531,9 @@
         updatePayload['stop' + i] = stopVal;
       }
 
+      hasLoadedExistingConfig = true; 
+
       if (currentRef) { 
-        // Use set() instead of update() on new configuration setups to explicitly force-build empty nodes
         currentRef.set(updatePayload, function(error) {
           if (error) {
             alert("❌ Firebase Connection Error!\n\nReason: " + error.message);
@@ -523,6 +551,33 @@
       } else { 
         Object.assign(localDeviceState, updatePayload);
         alert("✅ Local Sandbox Profile configurations cached successfully!");
+      }
+    }
+
+    // NEW: Ownership Release Command execution logic loop framework routine module
+    function transferDeviceOwnership() {
+      let currentSavedPassword = localStorage.getItem("admin_lock_pass") || "1234";
+      let userAttempt = prompt("⚠️ CRITICAL SECURITY ACTION:\nEnter your current ADMIN password to unlock and clear this Device ID registration profile data:");
+      
+      if (userAttempt === null) return;
+      if (userAttempt !== currentSavedPassword) {
+        alert("❌ Verification Failed: Access Denied.");
+        return;
+      }
+
+      if (currentRef) {
+        // Clear ownership mapping reference flag securely inside Firebase data paths
+        currentRef.child('deviceOwner').remove(function(error) {
+          if (error) {
+            alert("Transfer failed: " + error.message);
+          } else {
+            alert("🔓 Device successfully released! The next user to log in and click save will become the new Master Owner.");
+            logout();
+          }
+        });
+      } else {
+        localDeviceState.deviceOwner = null;
+        alert("Local Sandbox owner reference released successfully.");
       }
     }
 
