@@ -9,57 +9,89 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
 
   <style>
-    body { font-family: 'Segoe UI', Arial, sans-serif; background: linear-gradient(135deg, #0a1428, #1e3c72); color: white; margin:0; padding:15px; }
+    body { 
+      font-family: 'Segoe UI', Arial, sans-serif; 
+      background: linear-gradient(135deg, #0a1428, #1e3c72); 
+      color: white; 
+      margin:0; 
+      padding:15px; 
+    }
     .container { max-width: 1300px; margin: auto; }
-    .auth-box, .dashboard-box { background: rgba(255,255,255,0.1); backdrop-filter: blur(12px); border-radius: 20px; padding: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-    .hidden { display: none !important; }
-    .moisture-big { font-size: 5.8rem; font-weight: bold; text-align: center; color: #00ffcc; text-shadow: 0 0 25px rgba(0,255,200,0.6); }
 
-    input { width: 100%; padding: 14px; margin: 10px 0; border-radius: 8px; }
+    /* ================== ATTRACTIVE LOGIN PAGE ================== */
+    .auth-box {
+      background: rgba(255,255,255,0.12);
+      backdrop-filter: blur(15px);
+      border-radius: 25px;
+      padding: 40px 30px;
+      box-shadow: 0 15px 50px rgba(0,0,0,0.6);
+      max-width: 420px;
+      margin: 80px auto;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .auth-box h1 {
+      text-align: center;
+      font-size: 2.2rem;
+      margin-bottom: 10px;
+      background: linear-gradient(90deg, #00ffcc, #00ccff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .auth-box input {
+      width: 100%;
+      padding: 16px;
+      margin: 12px 0;
+      border: none;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.15);
+      color: white;
+      font-size: 1.05rem;
+    }
+    .auth-box input::placeholder { color: #aaa; }
     button { 
       width: 100%; 
       padding: 16px; 
-      margin: 8px 0; 
+      margin: 12px 0; 
       border: none; 
-      border-radius: 10px; 
+      border-radius: 12px; 
       font-size: 1.1rem; 
       font-weight: bold; 
       cursor: pointer;
       transition: all 0.3s;
     }
+    .btn-primary { background: #00cc88; color: white; }
+    .btn-primary:hover { background: #00e699; transform: translateY(-2px); }
+    .btn-google { background: #db4437; color: white; }
+    .btn-google:hover { background: #e05a4e; }
+
+    /* Dashboard Styles */
+    .hidden { display: none !important; }
+    .moisture-big { font-size: 5.8rem; font-weight: bold; text-align: center; color: #00ffcc; text-shadow: 0 0 25px rgba(0,255,200,0.6); }
+
     .btn-on { background: #28a745; color: white; }
     .btn-off { background: #dc3545; color: white; }
-    .btn-auto { background: #ffc107; color: black; font-size: 1.2rem; padding: 18px; }
-
-    .mill-view { background: linear-gradient(#0f1f33, #1e3a5f); border: 5px solid #334455; border-radius: 20px; padding: 20px; height: 380px; position: relative; overflow: hidden; }
-    .conveyor { position: absolute; bottom: 75px; width: 100%; height: 58px; background: repeating-linear-gradient(90deg, #444, #444 50px, #666 50px, #666 100px); animation: conveyorMove 1.1s linear infinite; }
-    @keyframes conveyorMove { 0% { background-position: 0 0; } 100% { background-position: -120px 0; } }
-    .cotton { position: absolute; bottom: 88px; width: 78px; height: 45px; background: linear-gradient(#f8f1e3, #e8d5b8); border-radius: 50%; animation: cottonFlow 7.5s linear infinite; }
-    @keyframes cottonFlow { 0% { left: -90px; } 100% { left: 105%; } }
-    .nozzle { position: absolute; top: 48px; width: 30px; height: 88px; background: linear-gradient(#555, #333); border-radius: 14px 14px 5px 5px; }
-    .mist { position: absolute; top: 98px; left: -10px; width: 48px; height: 120px; background: radial-gradient(circle, rgba(150,240,255,0.85) 30%, transparent); border-radius: 50%; opacity: 0; animation: sprayMist 0.75s linear infinite; }
-    @keyframes sprayMist { 0% { transform: scale(0.6); opacity: 0.9; } 100% { transform: scale(1.45) translateY(35px); opacity: 0; } }
-    .pump { position: absolute; bottom: 28px; left: 50px; font-size: 3.2rem; transition: all 0.3s; }
-    .pump.on { animation: pumpPulse 0.55s infinite; color: #00ffaa; }
-    @keyframes pumpPulse { 50% { transform: scale(1.15) rotate(10deg); } }
+    .btn-auto { background: #ffc107; color: black; padding: 18px; font-size: 1.2rem; }
   </style>
 </head>
 <body>
   <div class="container">
 
-    <!-- Login -->
+    <!-- ================== ATTRACTIVE LOGIN PAGE ================== -->
     <div id="authScreen">
       <div class="auth-box">
-        <h1 style="text-align:center;">🧵 Cotton Mill Control</h1>
+        <h1>🧵 Cotton Mill</h1>
+        <h3 style="text-align:center; margin-bottom:25px;">Moisture Control System</h3>
+        
         <input type="email" id="email" placeholder="Email Address" />
         <input type="password" id="password" placeholder="Password" />
-        <input type="text" id="deviceIDInput" placeholder="Device ID" value="cotton_mill_01" />
-        <button onclick="handleAuth()" style="background:#00cc88; color:white;">Login</button>
-        <button onclick="signInWithGoogle()" style="background:#db4437; color:white;">Sign in with Google</button>
+        <input type="text" id="deviceIDInput" placeholder="Device ID (e.g. cotton_mill_01)" value="cotton_mill_01" />
+        
+        <button onclick="handleAuth()" class="btn-primary">Login</button>
+        <button onclick="signInWithGoogle()" class="btn-google">Sign in with Google</button>
       </div>
     </div>
 
-    <!-- Dashboard -->
+    <!-- ================== DASHBOARD ================== -->
     <div id="dashboardScreen" class="hidden">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <h1>🧵 Cotton Mill Moisture Controller</h1>
@@ -68,7 +100,7 @@
 
       <div class="moisture-big" id="moisture">0.0%</div>
 
-      <div class="mill-view dashboard-box">
+      <div class="dashboard-box" style="height:340px; position:relative; overflow:hidden; margin:20px 0;">
         <div class="nozzle" style="left:18%;"><div class="mist" id="mist1"></div></div>
         <div class="nozzle" style="left:33%;"><div class="mist" id="mist2"></div></div>
         <div class="nozzle" style="left:48%;"><div class="mist" id="mist3"></div></div>
@@ -82,14 +114,12 @@
       <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:15px; margin:20px 0;">
         <div class="dashboard-box"><b>Pump:</b> <span id="pump">OFF</span></div>
         <div class="dashboard-box"><b>Nozzles:</b> <span id="nozzles">0/4</span></div>
-        <div class="dashboard-box"><b>Temp:</b> <span id="temp">0°C</span></div>
-        <div class="dashboard-box"><b>Humidity:</b> <span id="humidity">0%</span></div>
       </div>
 
-      <!-- Manual Control - Improved -->
+      <!-- Manual Control -->
       <div class="dashboard-box">
         <h2 style="text-align:center;">Control Mode</h2>
-        <button id="modeBtn" onclick="toggleMode()" style="background:#ffc107; color:black; font-size:1.2rem; padding:18px;">AUTO MODE</button>
+        <button id="modeBtn" onclick="toggleMode()" class="btn-auto">AUTO MODE</button>
 
         <h3 style="text-align:center; margin:20px 0 10px 0;">Manual Control</h3>
         <button id="pumpBtn" onclick="togglePump()" class="btn-off">Pump : OFF</button>
@@ -102,15 +132,16 @@
   </div>
 
   <script>
+    // ================== YOUR FIREBASE CONFIG ==================
     const firebaseConfig = {
-  apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
-  authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
-  projectId: "cotoon-mill-moisture-control",
-  storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
-  messagingSenderId: "963386638721",
-  appId: "1:963386638721:web:7bf38960d8ff5987132880",
-  measurementId: "G-WZEW8L9SMB"
-};
+      apiKey: "AIzaSyAbNc3w78oCdn6K6BaExIPQ1C4TOT_u5MM",
+      authDomain: "cotoon-mill-moisture-control.firebaseapp.com",
+      projectId: "cotoon-mill-moisture-control",
+      storageBucket: "cotoon-mill-moisture-control.firebasestorage.app",
+      messagingSenderId: "963386638721",
+      appId: "1:963386638721:web:7bf38960d8ff5987132880",
+      measurementId: "G-WZEW8L9SMB"
+    };
 
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
@@ -120,15 +151,18 @@
     let isAutoMode = true;
 
     function handleAuth() {
-      const email = document.getElementById('email').value;
-      const pass = document.getElementById('password').value;
+      const email = document.getElementById('email').value.trim();
+      const pass = document.getElementById('password').value.trim();
       const devID = document.getElementById('deviceIDInput').value.trim();
 
-      if (!devID) return alert("Please enter Device ID");
+      if (!email || !pass || !devID) {
+        alert("Please fill all fields");
+        return;
+      }
 
       auth.signInWithEmailAndPassword(email, pass)
         .then(() => loadDashboard(devID))
-        .catch(e => alert(e.message));
+        .catch(e => alert("Login Error: " + e.message));
     }
 
     function signInWithGoogle() {
@@ -138,7 +172,7 @@
           const devID = document.getElementById('deviceIDInput').value.trim() || "cotton_mill_01";
           loadDashboard(devID);
         })
-        .catch(e => alert(e.message));
+        .catch(e => alert("Google Login Error: " + e.message));
     }
 
     function loadDashboard(devID) {
@@ -150,14 +184,12 @@
     function loadDevice(devID) {
       if (currentRef) currentRef.off();
       currentRef = db.ref('devices/' + devID);
-      
-      currentRef.on('value', snap => {
+
+      currentRef.on('value', (snap) => {
         const d = snap.val() || {};
         document.getElementById('moisture').textContent = (d.moisture || 0).toFixed(1) + '%';
         document.getElementById('pump').textContent = d.pump || 'OFF';
         document.getElementById('nozzles').textContent = (d.nozzles || 0) + '/4';
-        document.getElementById('temp').textContent = (d.temp || 0).toFixed(1) + '°C';
-        document.getElementById('humidity').textContent = (d.humidity || 0).toFixed(1) + '%';
 
         document.getElementById('pumpIcon').classList.toggle('on', d.pump === 'ON');
 
@@ -166,23 +198,22 @@
           if (mist) mist.style.opacity = (i <= (d.nozzles || 0)) ? '1' : '0';
         }
 
-        // Update Manual Buttons
-        updateManualButtons(d);
+        updateButtons(d);
       });
     }
 
-    function updateManualButtons(d) {
-      // Pump
+    function updateButtons(d) {
       const pumpBtn = document.getElementById('pumpBtn');
       pumpBtn.textContent = `Pump : ${d.pump || 'OFF'}`;
       pumpBtn.className = (d.pump === 'ON') ? 'btn-on' : 'btn-off';
 
-      // Nozzles
       for (let i = 1; i <= 4; i++) {
-        const active = (d[`nozzle${i}`] === true) || ((d.nozzles || 0) >= i);
+        const active = d[`nozzle${i}`] === true;
         const btn = document.getElementById(`noz${i}Btn`);
-        btn.textContent = `Nozzle ${i} : ${active ? 'ON' : 'OFF'}`;
-        btn.className = active ? 'btn-on' : 'btn-off';
+        if (btn) {
+          btn.textContent = `Nozzle ${i} : ${active ? 'ON' : 'OFF'}`;
+          btn.className = active ? 'btn-on' : 'btn-off';
+        }
       }
     }
 
@@ -190,16 +221,15 @@
       isAutoMode = !isAutoMode;
       const btn = document.getElementById('modeBtn');
       btn.textContent = isAutoMode ? "AUTO MODE" : "MANUAL MODE";
-      btn.style.background = isAutoMode ? "#ffc107" : "#17a2b8";
-      currentRef.child('mode').set(isAutoMode ? "AUTO" : "MANUAL");
+      if (currentRef) currentRef.child('mode').set(isAutoMode ? "AUTO" : "MANUAL");
     }
 
     function togglePump() {
-      currentRef.child('manualPump').set(true);
+      if (currentRef) currentRef.child('manualPump').set(true);
     }
 
     function toggleNozzle(n) {
-      currentRef.child('manualNozzle' + n).set(true);
+      if (currentRef) currentRef.child('manualNozzle' + n).set(true);
     }
 
     function logout() { auth.signOut(); }
