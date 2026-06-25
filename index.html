@@ -397,15 +397,24 @@
     function renderDashboardMetrics(d) {
       if (!firebaseDataFullyReceived) return;
       
-      // FIXED: If the user just clicked a manual button, do not overwrite the UI colors yet
-      if (uiActionHoldTimeout !== null) return; 
-
       const pumpState = d.pump || 'OFF';
       let activeUserEmail = auth ? auth.currentUser.email : "sandbox@test.com";
       currentDeviceOwnerEmail = d.deviceOwner || null;
       
+      // FIXED: Visual updates for nozzles and pumps now run instantly, bypassing hold blockouts
       activePumpStateTracker = pumpState;
       activeNozzleMaskTracker = (d.nozzles || "0000").padEnd(4, '0');
+
+      document.getElementById('pump').textContent = pumpState;
+      document.getElementById('nozzles').textContent = (activeNozzleMaskTracker.match(/1/g) || []).length + '/4';
+      document.getElementById('pumpIcon').classList.toggle('on', pumpState === 'ON');
+      
+      for (let i = 1; i <= 4; i++) {
+        const mist = document.getElementById('mist' + i);
+        if (mist) mist.classList.toggle('spraying', activeNozzleMaskTracker[i - 1] === '1' && pumpState === 'ON');
+      }
+
+      if (uiActionHoldTimeout !== null) return; 
 
       if (currentDeviceOwnerEmail !== null && currentDeviceOwnerEmail !== activeUserEmail) {
         if (!userHasReadOnlyPermissions) {
@@ -472,15 +481,6 @@
       }
 
       isAutoMode = d.mode !== 'MANUAL';
-      document.getElementById('pump').textContent = pumpState;
-      document.getElementById('nozzles').textContent = (activeNozzleMaskTracker.match(/1/g) || []).length + '/4';
-      document.getElementById('pumpIcon').classList.toggle('on', pumpState === 'ON');
-      
-      for (let i = 1; i <= 4; i++) {
-        const mist = document.getElementById('mist' + i);
-        if (mist) mist.classList.toggle('spraying', activeNozzleMaskTracker[i - 1] === '1' && pumpState === 'ON');
-      }
-
       updateControlPanelInteractivity(pumpState, activeNozzleMaskTracker);
     }
 
@@ -660,6 +660,14 @@
       activePumpStateTracker = nextState;
       if (nextState === 'OFF') activeNozzleMaskTracker = "0000";
       
+      // Force instant top visual rendering
+      document.getElementById('pump').textContent = nextState;
+      document.getElementById('pumpIcon').classList.toggle('on', nextState === 'ON');
+      for (let i = 1; i <= 4; i++) {
+        const mist = document.getElementById('mist' + i);
+        if (mist) mist.classList.toggle('spraying', activeNozzleMaskTracker[i - 1] === '1' && nextState === 'ON');
+      }
+      
       updateControlPanelInteractivity(activePumpStateTracker, activeNozzleMaskTracker);
       
       if (uiActionHoldTimeout) clearTimeout(uiActionHoldTimeout);
@@ -686,6 +694,11 @@
       let nozzleArr = activeNozzleMaskTracker.split('');
       nozzleArr[n - 1] = (nozzleArr[n - 1] === '1') ? '0' : '1';
       activeNozzleMaskTracker = nozzleArr.join('');
+
+      // Force instant top visual rendering
+      document.getElementById('nozzles').textContent = (activeNozzleMaskTracker.match(/1/g) || []).length + '/4';
+      const mist = document.getElementById('mist' + n);
+      if (mist) mist.classList.toggle('spraying', activeNozzleMaskTracker[n - 1] === '1');
 
       updateControlPanelInteractivity(activePumpStateTracker, activeNozzleMaskTracker);
       
